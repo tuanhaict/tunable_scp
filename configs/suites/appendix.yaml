@@ -1,0 +1,11 @@
+experiments:
+  - ../experiments/self_validation_classification.yaml
+  - ../experiments/superconductivity_validation.yaml
+  - ../experiments/delta_classification.yaml
+  - ../experiments/hard_constraint.yaml
+  - ../experiments/hard_constraint_classification.yaml
+  - ../experiments/runtime.yaml
+  - ../experiments/budget_ablation.yaml
+  - ../experiments/model_ablation.yaml
+  - ../experiments/loo_validation_regression.yaml
+  - ../experiments/loo_validation_classification.yaml

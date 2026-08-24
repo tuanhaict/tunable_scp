@@ -1,0 +1,6 @@
+experiments:
+  - ../experiments/self_validation_regression.yaml
+  - ../experiments/delta_regression.yaml
+  - ../experiments/compare_ecp_regression.yaml
+  - ../experiments/compare_ecp_classification.yaml
+

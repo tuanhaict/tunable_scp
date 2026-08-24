@@ -1,0 +1,17 @@
+defaults: [../default.yaml]
+task: classification
+experiment:
+  name: self_validation_classification
+  type: self_validation
+datasets: [synthetic_classification, mnist, covertype]
+method:
+  delta: 1.1
+budget:
+  value_by_dataset:
+    synthetic_classification: 16
+    mnist: 4
+    covertype: 4
+data:
+  total_calibration_size: 1000
+  total_calibration_sizes: [600, 800, 1000, 1200, 1600, 2000]
+

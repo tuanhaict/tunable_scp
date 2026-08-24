@@ -1,0 +1,32 @@
+seeds: [0, 1, 2, 3, 4]
+
+model:
+  mean: random_forest
+  scale: random_forest
+  classifier: logistic
+
+method:
+  type: tscp
+  score: one_minus_probability
+  tie_break_epsilon: 1.0e-12
+  delta: 0.1
+  alpha_grid:
+    start: 0.01
+    stop: 0.99
+    steps: 99
+
+budget:
+  type: constant
+  minimum: 1.0
+  maximum: 20.0
+  beta: 3.0
+  uncertainty: auto
+
+data:
+  total_calibration_size: 2000
+  total_calibration_sizes: [500, 1000, 2000, 4000, 6000]
+  number_test_samples: [500, 1000, 1500, 2000, 2500]
+  fixed_number_test_samples: 1500
+
+output:
+  root: outputs

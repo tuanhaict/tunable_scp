@@ -1,0 +1,13 @@
+defaults: [../default.yaml]
+task: classification
+experiment:
+  name: hard_constraint_classification
+  type: hard_constraint
+datasets: [synthetic_classification, mnist, covertype]
+method:
+  delta: 1.1
+budget:
+  value_by_dataset:
+    synthetic_classification: 16
+    mnist: 4
+    covertype: 4

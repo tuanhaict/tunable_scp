@@ -1,0 +1,18 @@
+defaults: [../default.yaml]
+task: regression
+experiment:
+  name: runtime
+  type: runtime
+  methods: [scp, tscp, ecp, ecp_tpss]
+datasets: [synthetic_regression, california_housing, superconductivity, synthetic_classification, mnist, covertype]
+budget:
+  value_by_dataset:
+    synthetic_regression: 15.0
+    california_housing: 2.0
+    superconductivity: 40.0
+    synthetic_classification: 16
+    mnist: 4
+    covertype: 4
+data:
+  number_test_samples: [100, 250, 500, 1000, 2000]
+

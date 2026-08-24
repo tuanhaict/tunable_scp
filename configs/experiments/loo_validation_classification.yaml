@@ -1,0 +1,13 @@
+defaults: [../default.yaml]
+task: classification
+experiment:
+  name: loo_validation_classification
+  type: loo_validation
+datasets: [synthetic_classification, mnist, covertype]
+method:
+  delta: 1.1
+budget:
+  value_by_dataset:
+    synthetic_classification: 16
+    mnist: 4
+    covertype: 4

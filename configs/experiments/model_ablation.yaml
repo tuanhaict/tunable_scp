@@ -1,0 +1,16 @@
+defaults: [../default.yaml]
+task: regression
+experiment:
+  name: model_ablation
+  type: model_ablation
+  models_by_dataset:
+    california_housing: [ridge, gradient_boosting, random_forest, dnn]
+    mnist: [logistic, gradient_boosting, random_forest, dnn]
+datasets: [california_housing, mnist]
+method:
+  delta: 1.1
+budget:
+  value_by_dataset:
+    california_housing: 2.0
+    mnist: 4
+

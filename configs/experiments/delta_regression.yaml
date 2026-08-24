@@ -1,0 +1,15 @@
+defaults: [../default.yaml]
+task: regression
+experiment:
+  name: delta_ablation_regression
+  type: delta_ablation
+  deltas: [0.001, 0.01, 0.05, 0.1, 0.2, 0.4]
+datasets: [synthetic_regression, california_housing, superconductivity]
+budget:
+  value_by_dataset:
+    synthetic_regression: 15.0
+    california_housing: 2.0
+    superconductivity: 40.0
+data:
+  total_calibration_size: 6000
+

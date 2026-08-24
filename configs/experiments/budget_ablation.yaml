@@ -1,0 +1,16 @@
+defaults: [../default.yaml]
+task: regression
+experiment:
+  name: budget_ablation
+  type: budget_ablation
+  budget_types: [constant, linear, quadratic, exponential]
+datasets: [california_housing, mnist]
+method:
+  delta: 1.1
+budget:
+  value_by_dataset:
+    california_housing: 2.0
+    mnist: 4
+  minimum: 1.5
+  maximum: 4.0
+  beta: 3.0

@@ -1,0 +1,20 @@
+import numpy as np
+import pytest
+
+from tscp.methods.tscp import TsCPClassification, TsCPRegression
+from tscp.theory.coverage import estimate_classification_coverage, estimate_regression_coverage
+
+
+def test_corrected_classification_bound_uses_delta_hat():
+    method = TsCPClassification(np.array([0.1, 0.2, 0.3, 0.4]), np.array([0.15, 0.25, 0.35, 0.45]), np.array([0.2, 0.4, 0.6, 0.8]), 0.0)
+    label_scores = np.array([[0.1, 0.8], [0.2, 0.7], [0.3, 0.6], [0.4, 0.5]])
+    estimate = estimate_classification_coverage(method, label_scores, np.array([0, 0, 0, 0]), np.full(4, 2.0))
+    assert estimate.corrected_bound == pytest.approx(1.0 - estimate.alpha_hat - estimate.delta_hat)
+    assert len(estimate.delta_terms) == 4
+
+
+def test_corrected_regression_bound_uses_delta_hat():
+    method = TsCPRegression(np.array([0.2, 0.4, 0.6]), np.array([0.3, 0.5, 0.7]), np.array([0.2, 0.4, 0.6, 0.8]), 0.0)
+    estimate = estimate_regression_coverage(method, np.zeros(3), np.ones(3), np.array([0.2, 0.4, 0.6]), np.full(3, 4.0))
+    assert estimate.corrected_bound == pytest.approx(1.0 - estimate.alpha_hat - estimate.delta_hat)
+

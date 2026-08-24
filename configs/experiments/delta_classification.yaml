@@ -1,0 +1,15 @@
+defaults: [../default.yaml]
+task: classification
+experiment:
+  name: delta_ablation_classification
+  type: delta_ablation
+  deltas: [1.01, 1.1, 1.25, 1.5, 1.75]
+datasets: [synthetic_classification, mnist, covertype]
+budget:
+  value_by_dataset:
+    synthetic_classification: 16
+    mnist: 4
+    covertype: 4
+data:
+  total_calibration_size: 6000
+

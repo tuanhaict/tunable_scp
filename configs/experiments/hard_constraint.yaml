@@ -1,0 +1,12 @@
+defaults: [../default.yaml]
+task: regression
+experiment:
+  name: hard_constraint
+  type: hard_constraint
+datasets: [synthetic_regression, california_housing, superconductivity]
+budget:
+  value_by_dataset:
+    synthetic_regression: 15.0
+    california_housing: 2.0
+    superconductivity: 40.0
+

@@ -1,0 +1,15 @@
+defaults: [../default.yaml]
+task: regression
+experiment:
+  name: compare_ecp_regression
+  type: compare_ecp
+  budget_values:
+    synthetic_regression: [12, 14, 16, 18]
+    california_housing: [1.5, 2.0, 2.5, 3.0]
+    superconductivity: [32, 35, 38, 41]
+  variants:
+    - {name: "TsCP delta=0.01", method: tscp, delta: 0.01}
+    - {name: "TsCP delta=0.10", method: tscp, delta: 0.10}
+    - {name: "eCP", method: ecp}
+datasets: [synthetic_regression, california_housing, superconductivity]
+

@@ -1,0 +1,10 @@
+defaults: [../default.yaml]
+task: regression
+experiment:
+  name: model_ablation_regression
+  type: model_ablation
+  models: [ridge, gradient_boosting, random_forest, dnn]
+datasets: [california_housing]
+budget:
+  value: 2.0
+

@@ -1,0 +1,16 @@
+defaults: [../default.yaml]
+task: classification
+experiment:
+  name: compare_ecp_classification
+  type: compare_ecp
+  budget_values:
+    synthetic_classification: [14, 16, 18]
+    mnist: [2, 3, 4, 5]
+    covertype: [2, 3, 4, 5]
+  variants:
+    - {name: "TsCP probability", method: tscp, delta: 1.1, score: one_minus_probability}
+    - {name: "TsCP log-score", method: tscp, delta: 1.1, score: negative_log_probability}
+    - {name: "eCP probability", method: ecp, score: one_minus_probability}
+    - {name: "eCP log-score", method: ecp, score: negative_log_probability}
+datasets: [synthetic_classification, mnist, covertype]
+

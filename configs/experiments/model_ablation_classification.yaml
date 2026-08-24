@@ -1,0 +1,12 @@
+defaults: [../default.yaml]
+task: classification
+experiment:
+  name: model_ablation_classification
+  type: model_ablation
+  models: [logistic, gradient_boosting, random_forest, dnn]
+datasets: [mnist]
+method:
+  delta: 1.1
+budget:
+  value: 4
+
