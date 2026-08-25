@@ -5,4 +5,4 @@ __pycache__/
 outputs/
 *.egg-info/
 .pdf_text/
-
+.history

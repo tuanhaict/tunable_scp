@@ -3,10 +3,9 @@ task: regression
 experiment:
   name: self_validation_regression
   type: self_validation
-datasets: [synthetic_regression, california_housing, superconductivity]
+datasets: [synthetic_regression, california_housing]
 budget:
   value_by_dataset:
     synthetic_regression: 15.0
     california_housing: 2.0
     superconductivity: 40.0
-
