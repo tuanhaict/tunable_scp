@@ -232,13 +232,24 @@ def collect_loo_histogram(config: dict) -> pd.DataFrame:
                             trial_seed, number_test, score_type, tie_break_epsilon,
                         )
                     estimate = result.coverage_estimate
+                    # Independent-test counterparts of the two terms in the
+                    # corrected identity.  For test point j,
+                    # delta_j = 1{Y_j not in C(X_j)} - alpha_j.
+                    test_alpha = float(np.mean(result.alphas))
+                    test_delta = float(np.mean((1.0 - result.covered) - result.alphas))
+                    test_corrected = 1.0 - test_alpha - test_delta
                     rows.append({
                         "dataset": dataset,
                         "outer_seed": int(outer_seed),
                         "trial": trial,
                         "calibration_size": size,
                         "number_test": len(result.covered),
+                        # Retained as a direct numerical identity check:
+                        # test_corrected == test_coverage up to roundoff.
                         "test_coverage": result.coverage,
+                        "test_alpha": test_alpha,
+                        "test_delta": test_delta,
+                        "test_corrected": test_corrected,
                         "loo_coverage": estimate.corrected_bound,
                         "alpha_hat_loo": estimate.alpha_hat,
                         "delta_hat_loo": estimate.delta_hat,
@@ -408,7 +419,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         # Compute the edges once for the complete grid.  Computing them inside
         # each panel makes equal-looking bars represent different intervals.
         all_values = np.concatenate([
-            frame.test_coverage.to_numpy(dtype=float),
+            frame.test_corrected.to_numpy(dtype=float),
             frame.loo_coverage.to_numpy(dtype=float),
         ])
         all_values = all_values[np.isfinite(all_values)]
@@ -422,12 +433,13 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 ax = axes[row, col]
                 part = frame[(frame.dataset == dataset) & (frame.calibration_size == size)]
                 show_legend = row == 0 and col == 0
-                ax.hist(part.test_coverage, bins=histogram_bins, alpha=0.55,
-                        label="Independent-test coverage" if show_legend else "_nolegend_", color="tab:blue")
+                ax.hist(part.test_corrected, bins=histogram_bins, alpha=0.55,
+                        label=r"$1-\hat\alpha_{\rm test}-\hat\delta_{\rm test}$" if show_legend else "_nolegend_",
+                        color="tab:blue")
                 ax.hist(part.loo_coverage, bins=histogram_bins, alpha=0.55,
                         label=r"$1-\hat\alpha^{\mathrm{LOO}}-\hat\delta^{\mathrm{LOO}}$" if show_legend else "_nolegend_",
                         color="tab:orange")
-                ax.axvline(part.test_coverage.mean(), color="tab:blue", linestyle="--", linewidth=1.5)
+                ax.axvline(part.test_corrected.mean(), color="tab:blue", linestyle="--", linewidth=1.5)
                 ax.axvline(part.loo_coverage.mean(), color="tab:orange", linestyle="--", linewidth=1.5)
                 ax.set_xlim(histogram_bins[0], histogram_bins[-1])
                 if row == 0:
