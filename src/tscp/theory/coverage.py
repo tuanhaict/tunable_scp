@@ -25,6 +25,30 @@ def _result(alpha_terms: list[float], delta_terms: list[float]) -> CoverageEstim
     return CoverageEstimate(alpha_hat, delta_hat, 1.0 - alpha_hat, 1.0 - alpha_hat - delta_hat, alpha, delta)
 
 
+def _loo_quantiles(scores: np.ndarray, alpha_grid: np.ndarray) -> np.ndarray:
+    """All leave-one-out conformal quantiles in O(n log n + n*|grid|)."""
+    values = np.asarray(scores, dtype=float)
+    grid = np.asarray(alpha_grid, dtype=float)
+    n = len(values)
+    if n < 2:
+        raise ValueError("LOO coverage estimation requires at least two D1 scores.")
+    order = np.argsort(values, kind="stable")
+    sorted_values = values[order]
+    full_ranks = np.empty(n, dtype=int)
+    full_ranks[order] = np.arange(n)
+    output = np.empty((n, len(grid)), dtype=float)
+    reduced_size = n - 1
+    for j, alpha in enumerate(grid):
+        rank = int(np.ceil((reduced_size + 1) * (1.0 - alpha)))
+        if rank > reduced_size:
+            output[:, j] = np.inf
+            continue
+        base = rank - 1
+        indices = base + (full_ranks <= base)
+        output[:, j] = sorted_values[indices]
+    return output
+
+
 def estimate_classification_coverage(
     method: TsCPClassification,
     d1_label_scores: np.ndarray,
@@ -37,14 +61,16 @@ def estimate_classification_coverage(
     budgets = np.asarray(d1_budgets, dtype=float)
     if len(all_scores) != len(method.scores_d1):
         raise ValueError("D1 candidate scores must align with D1 true-label scores.")
-    alpha_terms: list[float] = []
-    delta_terms: list[float] = []
-    for k in range(len(all_scores)):
-        reduced = np.delete(method.scores_d1, k)
-        alpha_k = method.choose_alpha(all_scores[k], budgets[k], reduced)
-        miss = float(all_scores[k, labels[k]] > conformal_quantile(method.scores_d2, alpha_k))
-        alpha_terms.append(alpha_k)
-        delta_terms.append(miss - alpha_k)
+    loo_q1 = _loo_quantiles(method.scores_d1, method.alpha_grid)
+    sizes = np.sum(all_scores[:, None, :] <= loo_q1[:, :, None], axis=2)
+    feasible = sizes <= (budgets - method.delta)[:, None]
+    first = np.argmax(feasible, axis=1)
+    first[~np.any(feasible, axis=1)] = len(method.alpha_grid) - 1
+    alpha = method.alpha_grid[first]
+    q2 = method.q2_grid[first]
+    misses = (all_scores[np.arange(len(all_scores)), labels] > q2).astype(float)
+    alpha_terms = alpha.tolist()
+    delta_terms = (misses - alpha).tolist()
     return _result(alpha_terms, delta_terms)
 
 
@@ -62,12 +88,13 @@ def estimate_regression_coverage(
     if len(predictions) != len(method.scores_d1):
         raise ValueError("D1 observations must align with D1 scores.")
     true_scores = np.abs(targets - predictions) / np.maximum(scales, 1e-12)
-    alpha_terms: list[float] = []
-    delta_terms: list[float] = []
-    for k in range(len(predictions)):
-        reduced = np.delete(method.scores_d1, k)
-        alpha_k = method.choose_alpha(scales[k], budgets[k], reduced)
-        miss = float(true_scores[k] > conformal_quantile(method.scores_d2, alpha_k))
-        alpha_terms.append(alpha_k)
-        delta_terms.append(miss - alpha_k)
+    loo_q1 = _loo_quantiles(method.scores_d1, method.alpha_grid)
+    feasible = 2.0 * np.maximum(scales, 1e-12)[:, None] * loo_q1 <= (budgets - method.delta)[:, None]
+    first = np.argmax(feasible, axis=1)
+    first[~np.any(feasible, axis=1)] = len(method.alpha_grid) - 1
+    alpha = method.alpha_grid[first]
+    q2 = method.q2_grid[first]
+    misses = (true_scores > q2).astype(float)
+    alpha_terms = alpha.tolist()
+    delta_terms = (misses - alpha).tolist()
     return _result(alpha_terms, delta_terms)

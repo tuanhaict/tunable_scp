@@ -2,11 +2,17 @@ defaults: [../default.yaml]
 task: regression
 experiment:
   name: loo_validation_regression
-  type: loo_validation
-datasets: [synthetic_regression, california_housing, superconductivity]
+  type: loo_histogram
+  trials: 200
+  bins: 20
+seeds: [0]
+datasets: [synthetic_regression, california_housing]
+data:
+  # Total calibration size N_cal = 2n, split equally into D1 and D2.
+  total_calibration_sizes: [100, 2000, 6000]
+  fixed_number_test_samples: 2500
 budget:
   value_by_dataset:
     synthetic_regression: 15.0
     california_housing: 2.0
-    superconductivity: 40.0
-
+    # superconductivity: 40.0

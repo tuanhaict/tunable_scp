@@ -100,7 +100,19 @@ python scripts/run_suite.py --suite configs/suites/main_paper.yaml --smoke
 | `runtime.yaml` | A 2x3 figure for sCP, TsCP, eCP, and eCP-TPSS |
 | `budget_ablation.yaml` | Constant, linear, quadratic, and exponential budgets |
 | `model_ablation_*.yaml` | Coverage and set size vs. total calibration size for multiple models |
-| `loo_validation_*.yaml` | LOO errors for both `alpha_hat` and the revised `delta_hat` |
+| `loo_validation_*.yaml` | Histograms of independent-test coverage and the corrected LOO estimate `1-alpha_hat_LOO-delta_hat_LOO` |
+
+Run the regression or classification LOO histogram with:
+
+```bash
+python scripts/run_experiment.py --config configs/experiments/loo_validation_regression.yaml
+python scripts/run_experiment.py --config configs/experiments/loo_validation_classification.yaml
+```
+
+Each Monte Carlo trial redraws `D1` and `D2`. The `test_coverage` column is the
+mean coverage over the configured independent test batch, while `loo_coverage`
+is `1 - alpha_hat_loo - delta_hat_loo` from that trial. The histogram columns
+use total calibration size `N_cal = 2n`, not the size of either half.
 
 ## Outputs
 

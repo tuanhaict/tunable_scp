@@ -2,8 +2,15 @@ defaults: [../default.yaml]
 task: classification
 experiment:
   name: loo_validation_classification
-  type: loo_validation
+  type: loo_histogram
+  trials: 200
+  bins: 20
+seeds: [0]
 datasets: [synthetic_classification, mnist, covertype]
+data:
+  # Total calibration size N_cal = 2n, split equally into D1 and D2.
+  total_calibration_sizes: [100, 2000, 6000]
+  fixed_number_test_samples: 2500
 method:
   delta: 1.1
 budget:

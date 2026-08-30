@@ -37,6 +37,9 @@ def main() -> Path:
             config["experiment"]["budget_values"] = {synthetic: ([6, 10] if task == "regression" else [3, 4])}
         if config.get("experiment", {}).get("type") == "model_ablation":
             config["experiment"]["models"] = ["ridge"] if task == "regression" else ["logistic"]
+        if config.get("experiment", {}).get("type") == "loo_histogram":
+            config["experiment"]["trials"] = 3
+            config["experiment"]["bins"] = 5
 
     kind = config["experiment"]["type"]
     if kind not in COLLECTORS:

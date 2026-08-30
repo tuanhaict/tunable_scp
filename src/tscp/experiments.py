@@ -195,6 +195,57 @@ def collect_loo_validation(config: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def collect_loo_histogram(config: dict) -> pd.DataFrame:
+    """Compare independent-test coverage with the corrected LOO estimate.
+
+    A model/data split is fitted once for each outer seed.  Each trial then draws
+    fresh D1/D2 calibration subsets, evaluates the resulting predictor on a
+    large test batch, and computes 1-alpha_hat_LOO-delta_hat_LOO from D1.
+    """
+    rows = []
+    data_cfg = config.get("data", {})
+    method_cfg = config.get("method", {})
+    trials = int(config.get("experiment", {}).get("trials", 200))
+    number_test = int(data_cfg.get("fixed_number_test_samples", 2000))
+    grid = alpha_grid(config)
+    delta = float(method_cfg.get("delta", 0.1))
+    score_type = method_cfg.get("score", "one_minus_probability")
+    tie_break_epsilon = float(method_cfg.get("tie_break_epsilon", 0.0))
+
+    for dataset in config["datasets"]:
+        budget = budget_for_dataset(config, dataset)
+        for outer_seed in config["seeds"]:
+            task, split, fitted = prepare(config, dataset, int(outer_seed))
+            for size in data_cfg["total_calibration_sizes"]:
+                size = int(size)
+                for trial in range(trials):
+                    # Disjoint deterministic streams for every outer seed/size/trial.
+                    trial_seed = int(outer_seed) * 10_000_000 + size * 1_000 + trial
+                    if task == "regression":
+                        result = evaluate_regression(
+                            split, fitted, "tscp", size, budget, delta, grid,
+                            trial_seed, number_test,
+                        )
+                    else:
+                        result = evaluate_classification(
+                            split, fitted, "tscp", size, budget, delta, grid,
+                            trial_seed, number_test, score_type, tie_break_epsilon,
+                        )
+                    estimate = result.coverage_estimate
+                    rows.append({
+                        "dataset": dataset,
+                        "outer_seed": int(outer_seed),
+                        "trial": trial,
+                        "calibration_size": size,
+                        "number_test": len(result.covered),
+                        "test_coverage": result.coverage,
+                        "loo_coverage": estimate.corrected_bound,
+                        "alpha_hat_loo": estimate.alpha_hat,
+                        "delta_hat_loo": estimate.delta_hat,
+                    })
+    return pd.DataFrame(rows)
+
+
 def collect_runtime(config: dict) -> pd.DataFrame:
     """Time only conformal inference; fitting and score construction are outside the clock."""
     rows = []
@@ -268,6 +319,7 @@ COLLECTORS = {
     "budget_ablation": collect_budget_ablation,
     "model_ablation": collect_model_ablation,
     "loo_validation": collect_loo_validation,
+    "loo_histogram": collect_loo_histogram,
     "runtime": collect_runtime,
 }
 
@@ -345,12 +397,45 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             axes[1].plot(part.calibration_size, part.delta_abs_error, marker="o", label=dataset)
         axes[0].set(xlabel=r"Total calibration size $2n$", ylabel=r"$|\hat\alpha-E[\alpha]|$")
         axes[1].set(xlabel=r"Total calibration size $2n$", ylabel=r"$|\hat\Delta-E[\Delta]|$")
+    elif kind == "loo_histogram":
+        calibration_sizes = [int(value) for value in config["data"]["total_calibration_sizes"]]
+        fig, axes = plt.subplots(
+            len(datasets), len(calibration_sizes),
+            figsize=(4.2 * len(calibration_sizes), 3.0 * len(datasets)),
+            squeeze=False, sharex=True,
+        )
+        bins = int(config.get("experiment", {}).get("bins", 20))
+        for row, dataset in enumerate(datasets):
+            for col, size in enumerate(calibration_sizes):
+                ax = axes[row, col]
+                part = frame[(frame.dataset == dataset) & (frame.calibration_size == size)]
+                values = np.concatenate([part.test_coverage.to_numpy(), part.loo_coverage.to_numpy()])
+                finite = values[np.isfinite(values)]
+                histogram_bins = np.histogram_bin_edges(finite, bins=bins) if len(finite) else bins
+                show_legend = row == 0 and col == 0
+                ax.hist(part.test_coverage, bins=histogram_bins, alpha=0.55,
+                        label="Independent-test coverage" if show_legend else "_nolegend_", color="tab:blue")
+                ax.hist(part.loo_coverage, bins=histogram_bins, alpha=0.55,
+                        label=r"$1-\hat\alpha^{\mathrm{LOO}}-\hat\delta^{\mathrm{LOO}}$" if show_legend else "_nolegend_",
+                        color="tab:orange")
+                ax.axvline(part.test_coverage.mean(), color="tab:blue", linestyle="--", linewidth=1.5)
+                ax.axvline(part.loo_coverage.mean(), color="tab:orange", linestyle="--", linewidth=1.5)
+                if row == 0:
+                    ax.set_title(rf"$N_{{\mathrm{{cal}}}}=2n={size}$")
+                if col == 0:
+                    ax.set_ylabel(f"{dataset}\nFrequency")
+                if row == len(datasets) - 1:
+                    ax.set_xlabel("Coverage")
+                if show_legend:
+                    ax.legend(fontsize=7)
     else:
         return
     for ax in fig.axes:
         if ax.has_data():
             ax.grid(alpha=0.25)
-            ax.legend(fontsize=7)
+            handles, labels = ax.get_legend_handles_labels()
+            if labels:
+                ax.legend(fontsize=7)
     fig.tight_layout()
     fig.savefig(output / "figure.pdf", bbox_inches="tight")
     fig.savefig(output / "figure.png", dpi=180, bbox_inches="tight")
