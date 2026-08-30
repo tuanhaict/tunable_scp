@@ -5,7 +5,7 @@ experiment:
   type: loo_histogram
   trials: 200
   bins: 20
-seeds: [0]
+seeds: [1]
 datasets: [synthetic_regression, california_housing]
 data:
   # Total calibration size N_cal = 2n, split equally into D1 and D2.

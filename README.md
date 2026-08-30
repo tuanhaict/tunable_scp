@@ -112,7 +112,9 @@ python scripts/run_experiment.py --config configs/experiments/loo_validation_cla
 Each Monte Carlo trial redraws `D1` and `D2`. The `test_coverage` column is the
 mean coverage over the configured independent test batch, while `loo_coverage`
 is `1 - alpha_hat_loo - delta_hat_loo` from that trial. The histogram columns
-use total calibration size `N_cal = 2n`, not the size of either half.
+use total calibration size `N_cal = 2n`, not the size of either half. All panels
+share one set of histogram bin edges. An explicit common range can optionally be
+set with `experiment.histogram_range: [lower, upper]`.
 
 ## Outputs
 

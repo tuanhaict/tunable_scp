@@ -405,13 +405,22 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             squeeze=False, sharex=True,
         )
         bins = int(config.get("experiment", {}).get("bins", 20))
+        # Compute the edges once for the complete grid.  Computing them inside
+        # each panel makes equal-looking bars represent different intervals.
+        all_values = np.concatenate([
+            frame.test_coverage.to_numpy(dtype=float),
+            frame.loo_coverage.to_numpy(dtype=float),
+        ])
+        all_values = all_values[np.isfinite(all_values)]
+        if not len(all_values):
+            raise ValueError("LOO histogram has no finite coverage values to plot.")
+        configured_range = config.get("experiment", {}).get("histogram_range")
+        histogram_range = None if configured_range is None else tuple(map(float, configured_range))
+        histogram_bins = np.histogram_bin_edges(all_values, bins=bins, range=histogram_range)
         for row, dataset in enumerate(datasets):
             for col, size in enumerate(calibration_sizes):
                 ax = axes[row, col]
                 part = frame[(frame.dataset == dataset) & (frame.calibration_size == size)]
-                values = np.concatenate([part.test_coverage.to_numpy(), part.loo_coverage.to_numpy()])
-                finite = values[np.isfinite(values)]
-                histogram_bins = np.histogram_bin_edges(finite, bins=bins) if len(finite) else bins
                 show_legend = row == 0 and col == 0
                 ax.hist(part.test_coverage, bins=histogram_bins, alpha=0.55,
                         label="Independent-test coverage" if show_legend else "_nolegend_", color="tab:blue")
@@ -420,6 +429,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                         color="tab:orange")
                 ax.axvline(part.test_coverage.mean(), color="tab:blue", linestyle="--", linewidth=1.5)
                 ax.axvline(part.loo_coverage.mean(), color="tab:orange", linestyle="--", linewidth=1.5)
+                ax.set_xlim(histogram_bins[0], histogram_bins[-1])
                 if row == 0:
                     ax.set_title(rf"$N_{{\mathrm{{cal}}}}=2n={size}$")
                 if col == 0:
