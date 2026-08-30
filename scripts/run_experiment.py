@@ -40,6 +40,8 @@ def main() -> Path:
         if config.get("experiment", {}).get("type") == "loo_histogram":
             config["experiment"]["trials"] = 3
             config["experiment"]["bins"] = 5
+        if config.get("experiment", {}).get("type") == "loo_compare_ecp":
+            config["experiment"]["trials"] = 3
 
     kind = config["experiment"]["type"]
     if kind not in COLLECTORS:

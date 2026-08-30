@@ -9,3 +9,5 @@ experiments:
   - ../experiments/model_ablation.yaml
   - ../experiments/loo_validation_regression.yaml
   - ../experiments/loo_validation_classification.yaml
+  - ../experiments/loo_compare_ecp_regression.yaml
+  - ../experiments/loo_compare_ecp_classification.yaml

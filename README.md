@@ -101,6 +101,20 @@ python scripts/run_suite.py --suite configs/suites/main_paper.yaml --smoke
 | `budget_ablation.yaml` | Constant, linear, quadratic, and exponential budgets |
 | `model_ablation_*.yaml` | Coverage and set size vs. total calibration size for multiple models |
 | `loo_validation_*.yaml` | Histograms of independent-test coverage and the corrected LOO estimate `1-alpha_hat_LOO-delta_hat_LOO` |
+| `loo_compare_ecp_*.yaml` | Variance and absolute-error comparison: truncated eCP uses `alpha_hat_LOO`, TsCP uses `alpha_hat_LOO + delta_hat_LOO` |
+
+Run the revised LOO estimator comparison with:
+
+```bash
+python scripts/run_experiment.py --config configs/experiments/loo_compare_ecp_regression.yaml
+python scripts/run_experiment.py --config configs/experiments/loo_compare_ecp_classification.yaml
+```
+
+For each outer seed and calibration size, the comparison performs multiple
+calibration trials. The truncated-eCP estimator is `alpha_hat_loo`; the corrected
+TsCP estimator is `alpha_hat_loo + delta_hat_loo`. Their test targets are averaged
+over trials before absolute errors are computed. Lines and bands report the mean
+and one standard deviation over outer seeds.
 
 Run the regression or classification LOO histogram with:
 

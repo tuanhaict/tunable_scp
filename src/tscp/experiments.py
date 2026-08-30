@@ -19,6 +19,7 @@ from .methods.ecp import ECPClassification, ECPRegression
 from .methods.tscp import TsCPClassification, TsCPRegression
 from .models import fit_classification, fit_regression
 from .quantiles import conformal_quantile
+from .theory.coverage import estimate_ecp_classification_alpha_loo, estimate_ecp_regression_alpha_loo
 
 
 def alpha_grid(config: dict) -> np.ndarray:
@@ -257,6 +258,96 @@ def collect_loo_histogram(config: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
+    """Compare truncated-eCP alpha_LOO with corrected TsCP alpha_LOO+delta_LOO."""
+    rows = []
+    data_cfg = config.get("data", {})
+    method_cfg = config.get("method", {})
+    trials = int(config.get("experiment", {}).get("trials", 20))
+    number_test = int(data_cfg.get("fixed_number_test_samples", 1000))
+    grid = alpha_grid(config)
+    delta = float(method_cfg.get("delta", 0.1))
+    score_type = method_cfg.get("score", "one_minus_probability")
+    ecp_score_type = config.get("experiment", {}).get("ecp_score", score_type)
+    tie_epsilon = float(method_cfg.get("tie_break_epsilon", 0.0))
+
+    for dataset in config["datasets"]:
+        budget = budget_for_dataset(config, dataset)
+        for outer_seed in config["seeds"]:
+            task, split, fitted = prepare(config, dataset, int(outer_seed))
+            if task == "regression":
+                all_scores = np.abs(split.y_cal - fitted.pred_cal) / np.maximum(fitted.scale_cal, 1e-12)
+                cal_uncertainty = normalized_uncertainty(fitted.scale_cal, fitted.scale_reference)
+                cal_budgets = evaluate_budget(budget, cal_uncertainty)
+            for size in data_cfg["total_calibration_sizes"]:
+                size = int(size)
+                for trial in range(trials):
+                    trial_seed = int(outer_seed) * 10_000_000 + size * 1_000 + trial
+                    selected = np.random.default_rng(trial_seed).choice(len(split.y_cal), size, replace=False)
+                    if task == "regression":
+                        tscp_result = evaluate_regression(
+                            split, fitted, "tscp", size, budget, delta, grid, trial_seed, number_test,
+                        )
+                        ecp_result = evaluate_regression(
+                            split, fitted, "ecp", size, budget, delta, grid, trial_seed, number_test,
+                        )
+                        ecp_terms = estimate_ecp_regression_alpha_loo(
+                            all_scores[selected], fitted.scale_cal[selected], cal_budgets[selected], grid,
+                        )
+                    else:
+                        cal_scores = classification_scores(fitted.probs_cal, ecp_score_type)
+                        if tie_epsilon > 0:
+                            rng = np.random.default_rng(trial_seed + 7919)
+                            cal_scores = cal_scores + rng.uniform(0.0, tie_epsilon, cal_scores.shape)
+                        true_scores = cal_scores[np.arange(len(split.y_cal)), split.y_cal.astype(int)]
+                        uncertainty_kind = "entropy" if budget.uncertainty == "auto" else budget.uncertainty
+                        cal_budgets = evaluate_budget(
+                            budget, classification_uncertainty(fitted.probs_cal, uncertainty_kind), classification=True,
+                        )
+                        tscp_result = evaluate_classification(
+                            split, fitted, "tscp", size, budget, delta, grid, trial_seed,
+                            number_test, score_type, tie_epsilon,
+                        )
+                        ecp_result = evaluate_classification(
+                            split, fitted, "ecp", size, budget, delta, grid, trial_seed,
+                            number_test, ecp_score_type, tie_epsilon,
+                        )
+                        ecp_terms = estimate_ecp_classification_alpha_loo(
+                            true_scores[selected], cal_scores[selected], cal_budgets[selected], grid,
+                        )
+
+                    tscp_estimate = tscp_result.coverage_estimate
+                    tscp_test_alpha = float(tscp_result.alphas.mean())
+                    tscp_test_delta = float(np.mean((1.0 - tscp_result.covered) - tscp_result.alphas))
+                    values = [
+                        ("truncated_eCP", float(ecp_terms.mean()), 0.0,
+                         float(ecp_result.alphas.mean()), 0.0),
+                        ("TsCP", tscp_estimate.alpha_hat, tscp_estimate.delta_hat,
+                         tscp_test_alpha, tscp_test_delta),
+                    ]
+                    for method_name, loo_alpha, loo_delta, test_alpha, test_delta in values:
+                        estimate_value = loo_alpha + loo_delta
+                        target_value = test_alpha + test_delta
+                        rows.append({
+                            "dataset": dataset,
+                            "outer_seed": int(outer_seed),
+                            "trial": trial,
+                            "calibration_size": size,
+                            "method": method_name,
+                            "alpha_hat_loo": loo_alpha,
+                            "delta_hat_loo": loo_delta,
+                            "loo_estimate": estimate_value,
+                            "test_alpha": test_alpha,
+                            "test_delta": test_delta,
+                            "test_target": target_value,
+                        })
+    frame = pd.DataFrame(rows)
+    groups = ["dataset", "outer_seed", "calibration_size", "method"]
+    frame["target_expectation"] = frame.groupby(groups)["test_target"].transform("mean")
+    frame["absolute_error"] = np.abs(frame["loo_estimate"] - frame["target_expectation"])
+    return frame
+
+
 def collect_runtime(config: dict) -> pd.DataFrame:
     """Time only conformal inference; fitting and score construction are outside the clock."""
     rows = []
@@ -331,6 +422,7 @@ COLLECTORS = {
     "model_ablation": collect_model_ablation,
     "loo_validation": collect_loo_validation,
     "loo_histogram": collect_loo_histogram,
+    "loo_compare_ecp": collect_loo_compare_ecp,
     "runtime": collect_runtime,
 }
 
@@ -450,6 +542,55 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                     ax.set_xlabel("Coverage")
                 if show_legend:
                     ax.legend(fontsize=7)
+    elif kind == "loo_compare_ecp":
+        fig, axes = plt.subplots(2, len(datasets), figsize=(5.2 * len(datasets), 7.0), squeeze=False)
+        per_seed = frame.groupby(
+            ["dataset", "method", "calibration_size", "outer_seed"], as_index=False,
+        ).agg(
+            estimator_variance=("loo_estimate", "var"),
+            mean_absolute_error=("absolute_error", "mean"),
+        )
+        summary = per_seed.groupby(
+            ["dataset", "method", "calibration_size"], as_index=False,
+        ).agg(
+            variance_mean=("estimator_variance", "mean"),
+            variance_std=("estimator_variance", "std"),
+            error_mean=("mean_absolute_error", "mean"),
+            error_std=("mean_absolute_error", "std"),
+        ).fillna(0.0)
+        styles = {
+            "truncated_eCP": ("tab:blue", "o", r"truncated eCP: $\hat\alpha^{LOO}$"),
+            "TsCP": ("tab:orange", "s", r"TsCP: $\hat\alpha^{LOO}+\hat\delta^{LOO}$"),
+        }
+        for col, dataset in enumerate(datasets):
+            for method_name in ("truncated_eCP", "TsCP"):
+                part = summary[(summary.dataset == dataset) & (summary.method == method_name)].sort_values("calibration_size")
+                color, marker, label = styles[method_name]
+                x = part.calibration_size.to_numpy(dtype=float)
+                variance = part.variance_mean.to_numpy(dtype=float)
+                variance_std = part.variance_std.to_numpy(dtype=float)
+                error = part.error_mean.to_numpy(dtype=float)
+                error_std = part.error_std.to_numpy(dtype=float)
+                axes[0, col].plot(x, variance, color=color, marker=marker, label=label)
+                axes[0, col].fill_between(
+                    x, np.maximum(variance - variance_std, np.finfo(float).tiny),
+                    variance + variance_std, color=color, alpha=0.18,
+                )
+                axes[1, col].plot(x, error, color=color, marker=marker, label=label)
+                axes[1, col].fill_between(
+                    x, np.maximum(error - error_std, 0.0), error + error_std,
+                    color=color, alpha=0.18,
+                )
+            axes[0, col].set_title(dataset)
+            axes[0, col].set_xscale("log")
+            axes[0, col].set_yscale("log")
+            axes[0, col].set_xlabel(r"Total calibration size $N_{\mathrm{cal}}=2n$")
+            axes[1, col].set_xlabel(r"Total calibration size $N_{\mathrm{cal}}=2n$")
+            if col == 0:
+                axes[0, col].set_ylabel(r"$\mathrm{Var}(\hat\theta^{LOO})$")
+                axes[1, col].set_ylabel(r"$|\hat\theta^{LOO}-\widehat{\mathbb{E}}[\theta_{test}]|$")
+            if col == 0:
+                axes[0, col].legend()
     else:
         return
     for ax in fig.axes:
