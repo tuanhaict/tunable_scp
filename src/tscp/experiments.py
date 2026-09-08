@@ -259,12 +259,11 @@ def collect_loo_histogram(config: dict) -> pd.DataFrame:
 
 
 def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
-    """Compare truncated-eCP alpha_LOO with corrected TsCP alpha_LOO+delta_LOO."""
+    """Compare LOO estimators using one random test point per calibration trial."""
     rows = []
     data_cfg = config.get("data", {})
     method_cfg = config.get("method", {})
     trials = int(config.get("experiment", {}).get("trials", 20))
-    number_test = int(data_cfg.get("fixed_number_test_samples", 1000))
     grid = alpha_grid(config)
     delta = float(method_cfg.get("delta", 0.1))
     score_type = method_cfg.get("score", "one_minus_probability")
@@ -283,18 +282,34 @@ def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
                 size = int(size)
                 for trial in range(trials):
                     trial_seed = int(outer_seed) * 10_000_000 + size * 1_000 + trial
-                    selected = np.random.default_rng(trial_seed).choice(len(split.y_cal), size, replace=False)
+                    trial_rng = np.random.default_rng(trial_seed)
+                    selected = trial_rng.choice(len(split.y_cal), size, replace=False)
+                    test_index = int(trial_rng.integers(0, len(split.y_test)))
+                    # The LOO theory samples exactly one fresh test point in
+                    # each Monte Carlo trial.  Slice the prepared objects so
+                    # the shared evaluators operate on that random point only.
+                    trial_split = replace(
+                        split,
+                        x_test=split.x_test[[test_index]],
+                        y_test=split.y_test[[test_index]],
+                    )
                     if task == "regression":
+                        trial_fitted = replace(
+                            fitted,
+                            pred_test=fitted.pred_test[[test_index]],
+                            scale_test=fitted.scale_test[[test_index]],
+                        )
                         tscp_result = evaluate_regression(
-                            split, fitted, "tscp", size, budget, delta, grid, trial_seed, number_test,
+                            trial_split, trial_fitted, "tscp", size, budget, delta, grid, trial_seed, 1,
                         )
                         ecp_result = evaluate_regression(
-                            split, fitted, "ecp", size, budget, delta, grid, trial_seed, number_test,
+                            trial_split, trial_fitted, "ecp", size, budget, delta, grid, trial_seed, 1,
                         )
                         ecp_terms = estimate_ecp_regression_alpha_loo(
                             all_scores[selected], fitted.scale_cal[selected], cal_budgets[selected], grid,
                         )
                     else:
+                        trial_fitted = replace(fitted, probs_test=fitted.probs_test[[test_index]])
                         cal_scores = classification_scores(fitted.probs_cal, ecp_score_type)
                         if tie_epsilon > 0:
                             rng = np.random.default_rng(trial_seed + 7919)
@@ -305,12 +320,12 @@ def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
                             budget, classification_uncertainty(fitted.probs_cal, uncertainty_kind), classification=True,
                         )
                         tscp_result = evaluate_classification(
-                            split, fitted, "tscp", size, budget, delta, grid, trial_seed,
-                            number_test, score_type, tie_epsilon,
+                            trial_split, trial_fitted, "tscp", size, budget, delta, grid, trial_seed,
+                            1, score_type, tie_epsilon,
                         )
                         ecp_result = evaluate_classification(
-                            split, fitted, "ecp", size, budget, delta, grid, trial_seed,
-                            number_test, ecp_score_type, tie_epsilon,
+                            trial_split, trial_fitted, "ecp", size, budget, delta, grid, trial_seed,
+                            1, ecp_score_type, tie_epsilon,
                         )
                         ecp_terms = estimate_ecp_classification_alpha_loo(
                             true_scores[selected], cal_scores[selected], cal_budgets[selected], grid,
@@ -332,6 +347,8 @@ def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
                             "dataset": dataset,
                             "outer_seed": int(outer_seed),
                             "trial": trial,
+                            "test_index": test_index,
+                            "number_test": 1,
                             "calibration_size": size,
                             "method": method_name,
                             "alpha_hat_loo": loo_alpha,
@@ -342,9 +359,7 @@ def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
                             "test_target": target_value,
                         })
     frame = pd.DataFrame(rows)
-    groups = ["dataset", "outer_seed", "calibration_size", "method"]
-    frame["target_expectation"] = frame.groupby(groups)["test_target"].transform("mean")
-    frame["absolute_error"] = np.abs(frame["loo_estimate"] - frame["target_expectation"])
+    frame["absolute_error"] = np.abs(frame["loo_estimate"] - frame["test_target"])
     return frame
 
 
@@ -588,7 +603,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             axes[1, col].set_xlabel(r"Total calibration size $N_{\mathrm{cal}}=2n$")
             if col == 0:
                 axes[0, col].set_ylabel(r"$\mathrm{Var}(\hat\theta^{LOO})$")
-                axes[1, col].set_ylabel(r"$|\hat\theta^{LOO}-\widehat{\mathbb{E}}[\theta_{test}]|$")
+                axes[1, col].set_ylabel(r"$|\hat\theta^{LOO}-\theta_{test}|$")
             if col == 0:
                 axes[0, col].legend()
     else:

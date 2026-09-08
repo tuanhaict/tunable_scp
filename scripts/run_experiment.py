@@ -42,6 +42,7 @@ def main() -> Path:
             config["experiment"]["bins"] = 5
         if config.get("experiment", {}).get("type") == "loo_compare_ecp":
             config["experiment"]["trials"] = 3
+            config["data"]["fixed_number_test_samples"] = 1
 
     kind = config["experiment"]["type"]
     if kind not in COLLECTORS:
