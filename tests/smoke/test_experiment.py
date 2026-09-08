@@ -3,7 +3,7 @@ from pathlib import Path
 from tscp.config import load_config
 import numpy as np
 
-from tscp.experiments import collect_loo_compare_ecp, collect_self_validation
+from tscp.experiments import collect_loo_compare_ecp, collect_self_validation, summarize_loo_compare
 
 
 def test_self_validation_collector_on_small_synthetic_data():
@@ -46,3 +46,7 @@ def test_loo_comparison_uses_one_random_test_point_per_trial():
     np.testing.assert_allclose(
         frame["reference_target"], frame["reference_alpha"] + frame["reference_delta"],
     )
+    per_seed, points = summarize_loo_compare(frame)
+    assert len(per_seed) == 2
+    assert len(points) == 2
+    assert {"variance_mean", "absolute_error_mean", "reference_target_mean"} <= set(points.columns)

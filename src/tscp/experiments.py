@@ -519,6 +519,40 @@ def _mean(frame: pd.DataFrame, group: list[str], columns: list[str]) -> pd.DataF
     return frame.groupby(group, as_index=False)[columns].mean(numeric_only=True)
 
 
+def summarize_loo_compare(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return the per-seed and plotted point tables for the LOO comparison."""
+    groups = ["dataset", "method", "calibration_size", "outer_seed"]
+    per_seed = frame.groupby(groups, as_index=False).agg(
+        evaluation_trials=("trial", "nunique"),
+        estimator_variance=("loo_estimate", "var"),
+        mean_absolute_error=("absolute_error", "mean"),
+        reference_trials=("reference_trials", "first"),
+        reference_alpha=("reference_alpha", "first"),
+        reference_delta=("reference_delta", "first"),
+        reference_target=("reference_target", "first"),
+        reference_standard_error=("reference_standard_error", "first"),
+    )
+    summary = per_seed.groupby(
+        ["dataset", "method", "calibration_size"], as_index=False,
+    ).agg(
+        outer_seeds=("outer_seed", "nunique"),
+        evaluation_trials=("evaluation_trials", "first"),
+        reference_trials=("reference_trials", "first"),
+        variance_mean=("estimator_variance", "mean"),
+        variance_std=("estimator_variance", "std"),
+        absolute_error_mean=("mean_absolute_error", "mean"),
+        absolute_error_std=("mean_absolute_error", "std"),
+        reference_alpha_mean=("reference_alpha", "mean"),
+        reference_delta_mean=("reference_delta", "mean"),
+        reference_target_mean=("reference_target", "mean"),
+        reference_target_std=("reference_target", "std"),
+        reference_mc_standard_error_mean=("reference_standard_error", "mean"),
+    )
+    for column in ("variance_std", "absolute_error_std", "reference_target_std"):
+        summary[column] = summary[column].fillna(0.0)
+    return per_seed, summary
+
+
 def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
     kind = config["experiment"]["type"]
     datasets = config["datasets"]
@@ -632,20 +666,9 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                     ax.legend(fontsize=7)
     elif kind == "loo_compare_ecp":
         fig, axes = plt.subplots(2, len(datasets), figsize=(5.2 * len(datasets), 7.0), squeeze=False)
-        per_seed = frame.groupby(
-            ["dataset", "method", "calibration_size", "outer_seed"], as_index=False,
-        ).agg(
-            estimator_variance=("loo_estimate", "var"),
-            mean_absolute_error=("absolute_error", "mean"),
-        )
-        summary = per_seed.groupby(
-            ["dataset", "method", "calibration_size"], as_index=False,
-        ).agg(
-            variance_mean=("estimator_variance", "mean"),
-            variance_std=("estimator_variance", "std"),
-            error_mean=("mean_absolute_error", "mean"),
-            error_std=("mean_absolute_error", "std"),
-        ).fillna(0.0)
+        per_seed, summary = summarize_loo_compare(frame)
+        per_seed.to_csv(output / "loo_compare_points_by_seed.csv", index=False)
+        summary.to_csv(output / "loo_compare_points.csv", index=False)
         styles = {
             "truncated_eCP": ("tab:blue", "o", r"truncated eCP: $\hat\alpha^{LOO}$"),
             "TsCP": ("tab:orange", "s", r"TsCP: $\hat\alpha^{LOO}+\hat\delta^{LOO}$"),
@@ -657,8 +680,8 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 x = part.calibration_size.to_numpy(dtype=float)
                 variance = part.variance_mean.to_numpy(dtype=float)
                 variance_std = part.variance_std.to_numpy(dtype=float)
-                error = part.error_mean.to_numpy(dtype=float)
-                error_std = part.error_std.to_numpy(dtype=float)
+                error = part.absolute_error_mean.to_numpy(dtype=float)
+                error_std = part.absolute_error_std.to_numpy(dtype=float)
                 axes[0, col].plot(x, variance, color=color, marker=marker, label=label)
                 axes[0, col].fill_between(
                     x, np.maximum(variance - variance_std, np.finfo(float).tiny),
@@ -676,7 +699,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             axes[1, col].set_xlabel(r"Total calibration size $N_{\mathrm{cal}}=2n$")
             if col == 0:
                 axes[0, col].set_ylabel(r"$\mathrm{Var}(\hat\theta^{LOO})$")
-                axes[1, col].set_ylabel(r"$|\hat\theta^{LOO}-\theta_{test}|$")
+                axes[1, col].set_ylabel(r"$|\hat\theta^{LOO}-\widehat{\mathbb{E}}[\theta]|$")
             if col == 0:
                 axes[0, col].legend()
     else:

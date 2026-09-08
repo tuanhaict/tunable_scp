@@ -120,6 +120,11 @@ fixed target expectation. Errors are then computed as
 standard deviation over outer seeds. The CSV also records the reference alpha,
 delta, target, and Monte Carlo standard error.
 
+LOO comparison runs additionally write `loo_compare_points.csv`, containing the
+exact mean and standard-deviation values plotted at every calibration size, and
+`loo_compare_points_by_seed.csv`, containing the corresponding per-outer-seed
+statistics.
+
 Run the regression or classification LOO histogram with:
 
 ```bash
