@@ -10,9 +10,9 @@ data:
   total_calibration_sizes: [100, 500, 1000, 2000, 4000, 6000]
   fixed_number_test_samples: 1000
 method:
-  delta: 0.0001
+  delta: 0.1
 budget:
   value_by_dataset:
-    synthetic_regression: 16.0
-    california_housing: 2.5
+    synthetic_regression: 20.0
+    california_housing: 3.0
     superconductivity: 40.0
