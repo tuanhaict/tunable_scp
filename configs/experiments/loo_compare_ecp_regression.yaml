@@ -3,8 +3,8 @@ task: regression
 experiment:
   name: loo_compare_ecp_regression
   type: loo_compare_ecp
-  trials: 20
-  reference_trials: 500
+  trials: 50
+  reference_trials: 1000
 seeds: [0, 1, 2, 3, 4]
 datasets: [synthetic_regression, california_housing, superconductivity]
 model:
@@ -14,7 +14,7 @@ data:
   total_calibration_sizes: [500, 1000, 2000, 4000, 6000]
   fixed_number_test_samples: 1
 method:
-  delta: 0.1
+  delta: 0.001
 budget:
   value_by_dataset:
     synthetic_regression: 15.0
