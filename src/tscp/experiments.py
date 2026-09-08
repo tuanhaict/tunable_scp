@@ -259,15 +259,21 @@ def collect_loo_histogram(config: dict) -> pd.DataFrame:
 
 
 def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
-    """Compare LOO estimators using one random test point per calibration trial."""
+    """Compare LOO estimators against independent Monte Carlo expectations."""
     rows = []
     data_cfg = config.get("data", {})
     method_cfg = config.get("method", {})
-    trials = int(config.get("experiment", {}).get("trials", 20))
+    experiment_cfg = config.get("experiment", {})
+    trials = int(experiment_cfg.get("trials", 20))
+    reference_trials = int(experiment_cfg.get("reference_trials", 500))
+    if trials < 2:
+        raise ValueError("LOO comparison requires at least two evaluation trials for variance.")
+    if reference_trials < 2:
+        raise ValueError("LOO comparison requires at least two independent reference trials.")
     grid = alpha_grid(config)
     delta = float(method_cfg.get("delta", 0.1))
     score_type = method_cfg.get("score", "one_minus_probability")
-    ecp_score_type = config.get("experiment", {}).get("ecp_score", score_type)
+    ecp_score_type = experiment_cfg.get("ecp_score", score_type)
     tie_epsilon = float(method_cfg.get("tie_break_epsilon", 0.0))
 
     for dataset in config["datasets"]:
@@ -278,32 +284,99 @@ def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
                 all_scores = np.abs(split.y_cal - fitted.pred_cal) / np.maximum(fitted.scale_cal, 1e-12)
                 cal_uncertainty = normalized_uncertainty(fitted.scale_cal, fitted.scale_reference)
                 cal_budgets = evaluate_budget(budget, cal_uncertainty)
+            else:
+                uncertainty_kind = "entropy" if budget.uncertainty == "auto" else budget.uncertainty
+                cal_budgets = evaluate_budget(
+                    budget, classification_uncertainty(fitted.probs_cal, uncertainty_kind), classification=True,
+                )
+
+            def one_test_view(test_index: int):
+                trial_split = replace(
+                    split, x_test=split.x_test[[test_index]], y_test=split.y_test[[test_index]],
+                )
+                if task == "regression":
+                    trial_fitted = replace(
+                        fitted,
+                        pred_test=fitted.pred_test[[test_index]],
+                        scale_test=fitted.scale_test[[test_index]],
+                    )
+                else:
+                    trial_fitted = replace(fitted, probs_test=fitted.probs_test[[test_index]])
+                return trial_split, trial_fitted
+
             for size in data_cfg["total_calibration_sizes"]:
                 size = int(size)
+
+                # Estimate each target expectation using an independent seed
+                # stream.  Every draw resamples calibration and one test point.
+                reference = {"truncated_eCP": [], "TsCP": []}
+                reference_alpha = {"truncated_eCP": [], "TsCP": []}
+                reference_delta = {"truncated_eCP": [], "TsCP": []}
+                for reference_trial in range(reference_trials):
+                    reference_seed = (
+                        1_000_000_000 + int(outer_seed) * 10_000_000
+                        + size * 1_000 + reference_trial
+                    )
+                    reference_rng = np.random.default_rng(reference_seed)
+                    reference_rng.choice(len(split.y_cal), size, replace=False)
+                    test_index = int(reference_rng.integers(0, len(split.y_test)))
+                    trial_split, trial_fitted = one_test_view(test_index)
+                    if task == "regression":
+                        tscp_reference = evaluate_regression(
+                            trial_split, trial_fitted, "tscp", size, budget, delta,
+                            grid, reference_seed, 1, estimate_coverage=False,
+                        )
+                        ecp_reference = evaluate_regression(
+                            trial_split, trial_fitted, "ecp", size, budget, delta,
+                            grid, reference_seed, 1, estimate_coverage=False,
+                        )
+                    else:
+                        tscp_reference = evaluate_classification(
+                            trial_split, trial_fitted, "tscp", size, budget, delta,
+                            grid, reference_seed, 1, score_type, tie_epsilon,
+                            estimate_coverage=False,
+                        )
+                        ecp_reference = evaluate_classification(
+                            trial_split, trial_fitted, "ecp", size, budget, delta,
+                            grid, reference_seed, 1, ecp_score_type, tie_epsilon,
+                            estimate_coverage=False,
+                        )
+                    ecp_alpha = float(ecp_reference.alphas[0])
+                    tscp_alpha = float(tscp_reference.alphas[0])
+                    tscp_delta = float((1.0 - tscp_reference.covered[0]) - tscp_alpha)
+                    reference_alpha["truncated_eCP"].append(ecp_alpha)
+                    reference_delta["truncated_eCP"].append(0.0)
+                    reference["truncated_eCP"].append(ecp_alpha)
+                    reference_alpha["TsCP"].append(tscp_alpha)
+                    reference_delta["TsCP"].append(tscp_delta)
+                    reference["TsCP"].append(tscp_alpha + tscp_delta)
+
+                reference_stats = {}
+                for method_name in ("truncated_eCP", "TsCP"):
+                    samples = np.asarray(reference[method_name], dtype=float)
+                    reference_stats[method_name] = {
+                        "alpha": float(np.mean(reference_alpha[method_name])),
+                        "delta": float(np.mean(reference_delta[method_name])),
+                        "target": float(samples.mean()),
+                        "standard_error": float(samples.std(ddof=1) / np.sqrt(reference_trials)),
+                    }
+
+                # Independent evaluation stream: only these LOO estimates enter
+                # the variance and absolute-error curves.
                 for trial in range(trials):
                     trial_seed = int(outer_seed) * 10_000_000 + size * 1_000 + trial
                     trial_rng = np.random.default_rng(trial_seed)
                     selected = trial_rng.choice(len(split.y_cal), size, replace=False)
                     test_index = int(trial_rng.integers(0, len(split.y_test)))
-                    # The LOO theory samples exactly one fresh test point in
-                    # each Monte Carlo trial.  Slice the prepared objects so
-                    # the shared evaluators operate on that random point only.
-                    trial_split = replace(
-                        split,
-                        x_test=split.x_test[[test_index]],
-                        y_test=split.y_test[[test_index]],
-                    )
+                    trial_split, trial_fitted = one_test_view(test_index)
                     if task == "regression":
-                        trial_fitted = replace(
-                            fitted,
-                            pred_test=fitted.pred_test[[test_index]],
-                            scale_test=fitted.scale_test[[test_index]],
-                        )
                         tscp_result = evaluate_regression(
-                            trial_split, trial_fitted, "tscp", size, budget, delta, grid, trial_seed, 1,
+                            trial_split, trial_fitted, "tscp", size, budget, delta,
+                            grid, trial_seed, 1,
                         )
                         ecp_result = evaluate_regression(
-                            trial_split, trial_fitted, "ecp", size, budget, delta, grid, trial_seed, 1,
+                            trial_split, trial_fitted, "ecp", size, budget, delta,
+                            grid, trial_seed, 1,
                         )
                         ecp_terms = estimate_ecp_regression_alpha_loo(
                             all_scores[selected], fitted.scale_cal[selected], cal_budgets[selected], grid,
@@ -315,34 +388,30 @@ def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
                             rng = np.random.default_rng(trial_seed + 7919)
                             cal_scores = cal_scores + rng.uniform(0.0, tie_epsilon, cal_scores.shape)
                         true_scores = cal_scores[np.arange(len(split.y_cal)), split.y_cal.astype(int)]
-                        uncertainty_kind = "entropy" if budget.uncertainty == "auto" else budget.uncertainty
-                        cal_budgets = evaluate_budget(
-                            budget, classification_uncertainty(fitted.probs_cal, uncertainty_kind), classification=True,
-                        )
                         tscp_result = evaluate_classification(
-                            trial_split, trial_fitted, "tscp", size, budget, delta, grid, trial_seed,
-                            1, score_type, tie_epsilon,
+                            trial_split, trial_fitted, "tscp", size, budget, delta,
+                            grid, trial_seed, 1, score_type, tie_epsilon,
                         )
                         ecp_result = evaluate_classification(
-                            trial_split, trial_fitted, "ecp", size, budget, delta, grid, trial_seed,
-                            1, ecp_score_type, tie_epsilon,
+                            trial_split, trial_fitted, "ecp", size, budget, delta,
+                            grid, trial_seed, 1, ecp_score_type, tie_epsilon,
                         )
                         ecp_terms = estimate_ecp_classification_alpha_loo(
                             true_scores[selected], cal_scores[selected], cal_budgets[selected], grid,
                         )
 
                     tscp_estimate = tscp_result.coverage_estimate
-                    tscp_test_alpha = float(tscp_result.alphas.mean())
-                    tscp_test_delta = float(np.mean((1.0 - tscp_result.covered) - tscp_result.alphas))
+                    tscp_test_alpha = float(tscp_result.alphas[0])
+                    tscp_test_delta = float((1.0 - tscp_result.covered[0]) - tscp_test_alpha)
                     values = [
                         ("truncated_eCP", float(ecp_terms.mean()), 0.0,
-                         float(ecp_result.alphas.mean()), 0.0),
+                         float(ecp_result.alphas[0]), 0.0),
                         ("TsCP", tscp_estimate.alpha_hat, tscp_estimate.delta_hat,
                          tscp_test_alpha, tscp_test_delta),
                     ]
                     for method_name, loo_alpha, loo_delta, test_alpha, test_delta in values:
                         estimate_value = loo_alpha + loo_delta
-                        target_value = test_alpha + test_delta
+                        stats = reference_stats[method_name]
                         rows.append({
                             "dataset": dataset,
                             "outer_seed": int(outer_seed),
@@ -354,13 +423,17 @@ def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
                             "alpha_hat_loo": loo_alpha,
                             "delta_hat_loo": loo_delta,
                             "loo_estimate": estimate_value,
-                            "test_alpha": test_alpha,
-                            "test_delta": test_delta,
-                            "test_target": target_value,
+                            "test_alpha_sample": test_alpha,
+                            "test_delta_sample": test_delta,
+                            "test_target_sample": test_alpha + test_delta,
+                            "reference_trials": reference_trials,
+                            "reference_alpha": stats["alpha"],
+                            "reference_delta": stats["delta"],
+                            "reference_target": stats["target"],
+                            "reference_standard_error": stats["standard_error"],
+                            "absolute_error": abs(estimate_value - stats["target"]),
                         })
-    frame = pd.DataFrame(rows)
-    frame["absolute_error"] = np.abs(frame["loo_estimate"] - frame["test_target"])
-    return frame
+    return pd.DataFrame(rows)
 
 
 def collect_runtime(config: dict) -> pd.DataFrame:

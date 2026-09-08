@@ -113,9 +113,12 @@ python scripts/run_experiment.py --config configs/experiments/loo_compare_ecp_cl
 For each outer seed and calibration size, the comparison performs multiple
 calibration trials. The truncated-eCP estimator is `alpha_hat_loo`; the corrected
 TsCP estimator is `alpha_hat_loo + delta_hat_loo`. Every trial resamples the
-calibration subset and exactly one random test point, then computes the paired
-error `abs(loo_estimate - test_target)`. Lines and bands report the mean and one
-standard deviation over outer seeds.
+calibration subset. A separate, independent `reference_trials` stream resamples
+both calibration and exactly one random test point per draw to estimate the
+fixed target expectation. Errors are then computed as
+`abs(loo_estimate - reference_target)`. Lines and bands report the mean and one
+standard deviation over outer seeds. The CSV also records the reference alpha,
+delta, target, and Monte Carlo standard error.
 
 Run the regression or classification LOO histogram with:
 

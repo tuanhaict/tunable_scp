@@ -4,6 +4,8 @@ experiment:
   name: loo_compare_ecp_classification
   type: loo_compare_ecp
   trials: 20
+  # Independent Monte Carlo draws used only to estimate the target expectation.
+  reference_trials: 500
   ecp_score: negative_log_probability
 seeds: [0, 1, 2, 3, 4]
 datasets: [synthetic_classification, mnist, covertype]

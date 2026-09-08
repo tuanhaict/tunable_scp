@@ -51,6 +51,7 @@ def _indices(pool_size: int, total: int, seed: int) -> tuple[np.ndarray, np.ndar
 def evaluate_regression(
     split: DataSplit, predictions: RegressionPredictions, method_name: str, total_calibration_size: int,
     budget_spec: BudgetSpec, delta: float, alpha_grid: np.ndarray, seed: int, number_test: int,
+    estimate_coverage: bool = True,
 ) -> Evaluation:
     d1, d2 = _indices(len(split.y_cal), total_calibration_size, seed)
     scores = np.abs(split.y_cal - predictions.pred_cal) / np.maximum(predictions.scale_cal, 1e-12)
@@ -64,7 +65,8 @@ def evaluate_regression(
     theory = None
     if method_name == "tscp":
         method = TsCPRegression(scores[d1], scores[d2], alpha_grid, delta)
-        theory = estimate_regression_coverage(method, predictions.pred_cal[d1], predictions.scale_cal[d1], split.y_cal[d1], budgets_cal[d1])
+        if estimate_coverage:
+            theory = estimate_regression_coverage(method, predictions.pred_cal[d1], predictions.scale_cal[d1], split.y_cal[d1], budgets_cal[d1])
     elif method_name == "ecp":
         method = ECPRegression(scores[np.concatenate([d1, d2])], alpha_grid)
     else:
@@ -80,7 +82,7 @@ def evaluate_regression(
 def evaluate_classification(
     split: DataSplit, predictions: ClassificationPredictions, method_name: str, total_calibration_size: int,
     budget_spec: BudgetSpec, delta: float, alpha_grid: np.ndarray, seed: int, number_test: int, score_type: str,
-    tie_break_epsilon: float = 0.0,
+    tie_break_epsilon: float = 0.0, estimate_coverage: bool = True,
 ) -> Evaluation:
     d1, d2 = _indices(len(split.y_cal), total_calibration_size, seed)
     scores_cal = classification_scores(predictions.probs_cal, score_type)
@@ -98,7 +100,8 @@ def evaluate_classification(
     theory = None
     if method_name == "tscp":
         method = TsCPClassification(true_scores[d1], true_scores[d2], alpha_grid, delta)
-        theory = estimate_classification_coverage(method, scores_cal[d1], split.y_cal[d1], budgets_cal[d1])
+        if estimate_coverage:
+            theory = estimate_classification_coverage(method, scores_cal[d1], split.y_cal[d1], budgets_cal[d1])
     elif method_name == "ecp":
         method = ECPClassification(true_scores[np.concatenate([d1, d2])], alpha_grid)
     else:

@@ -32,6 +32,7 @@ def test_loo_comparison_uses_one_random_test_point_per_trial():
     config["seeds"] = [0]
     config["model"] = {"mean": "ridge", "scale": "ridge"}
     config["experiment"]["trials"] = 2
+    config["experiment"]["reference_trials"] = 4
     config["data"].update({"max_samples": 800, "total_calibration_sizes": [60]})
     config["budget"] = {"type": "constant", "value": 10.0}
 
@@ -40,5 +41,8 @@ def test_loo_comparison_uses_one_random_test_point_per_trial():
     assert set(frame["number_test"]) == {1}
     assert frame.groupby(["outer_seed", "trial"])["test_index"].nunique().eq(1).all()
     np.testing.assert_allclose(
-        frame["absolute_error"], np.abs(frame["loo_estimate"] - frame["test_target"]),
+        frame["absolute_error"], np.abs(frame["loo_estimate"] - frame["reference_target"]),
+    )
+    np.testing.assert_allclose(
+        frame["reference_target"], frame["reference_alpha"] + frame["reference_delta"],
     )
