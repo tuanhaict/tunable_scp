@@ -6,6 +6,9 @@ experiment:
   trials: 20
 seeds: [0, 1, 2, 3, 4]
 datasets: [synthetic_regression, california_housing, superconductivity]
+model:
+  mean: gradient_boosting
+  scale: gradient_boosting
 data:
   total_calibration_sizes: [500, 1000, 2000, 4000, 6000]
   # The LOO protocol samples exactly one random test point per trial.
