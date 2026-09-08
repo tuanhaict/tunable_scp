@@ -46,7 +46,7 @@ def load_dataset(name: str, seed: int = 0, max_samples: int | None = None) -> tu
     return np.asarray(x), np.asarray(y), task
 
 
-def split_dataset(x: np.ndarray, y: np.ndarray, task: str, seed: int, test_fraction: float = 0.05, calibration_fraction: float = 0.2) -> DataSplit:
+def split_dataset(x: np.ndarray, y: np.ndarray, task: str, seed: int, test_fraction: float = 0.2, calibration_fraction: float = 0.4) -> DataSplit:
     stratify = y if task == "classification" else None
     x_rest, x_test, y_rest, y_test = train_test_split(x, y, test_size=test_fraction, random_state=seed, stratify=stratify)
     relative_cal = calibration_fraction / (1.0 - test_fraction)
