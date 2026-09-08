@@ -553,6 +553,29 @@ def summarize_loo_compare(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     return per_seed, summary
 
 
+def loo_compare_report_table(summary: pd.DataFrame) -> pd.DataFrame:
+    """Compact wide table containing only the points shown on the two plots."""
+    table = summary.pivot(
+        index=["dataset", "calibration_size"],
+        columns="method",
+        values=["variance_mean", "absolute_error_mean"],
+    )
+    table.columns = [f"{metric}__{method}" for metric, method in table.columns]
+    table = table.reset_index().rename(columns={
+        "calibration_size": "total_calibration_size",
+        "variance_mean__truncated_eCP": "ecp_variance",
+        "variance_mean__TsCP": "tscp_variance",
+        "absolute_error_mean__truncated_eCP": "ecp_absolute_error",
+        "absolute_error_mean__TsCP": "tscp_absolute_error",
+    })
+    columns = [
+        "dataset", "total_calibration_size",
+        "ecp_variance", "tscp_variance",
+        "ecp_absolute_error", "tscp_absolute_error",
+    ]
+    return table[columns].sort_values(["dataset", "total_calibration_size"]).reset_index(drop=True)
+
+
 def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
     kind = config["experiment"]["type"]
     datasets = config["datasets"]
@@ -668,7 +691,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         fig, axes = plt.subplots(2, len(datasets), figsize=(5.2 * len(datasets), 7.0), squeeze=False)
         per_seed, summary = summarize_loo_compare(frame)
         per_seed.to_csv(output / "loo_compare_points_by_seed.csv", index=False)
-        summary.to_csv(output / "loo_compare_points.csv", index=False)
+        loo_compare_report_table(summary).to_csv(output / "loo_compare_points.csv", index=False)
         styles = {
             "truncated_eCP": ("tab:blue", "o", r"truncated eCP: $\hat\alpha^{LOO}$"),
             "TsCP": ("tab:orange", "s", r"TsCP: $\hat\alpha^{LOO}+\hat\delta^{LOO}$"),
