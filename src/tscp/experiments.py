@@ -720,18 +720,63 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
     kind = config["experiment"]["type"]
     datasets = config["datasets"]
     if kind == "self_validation":
-        fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
         cov = _mean(frame[frame.panel == "coverage"], ["dataset", "x"], ["empirical", "corrected_bound", "old_proxy"])
         size = _mean(frame[frame.panel == "size"], ["dataset", "x"], ["average_size", "budget"])
-        for dataset in datasets:
+
+        display_names = {
+            "synthetic_regression": "SyntheticRegression",
+            "california_housing": "CaliforniaHousing",
+            "synthetic_classification": "SyntheticClassification",
+            "mnist": "MNIST",
+        }
+
+        # Coverage figure: one panel per dataset.  The empirical curve varies
+        # with the test-batch prefix, whereas the independent-reference target
+        # is constant in the number of test samples.
+        coverage_fig, coverage_axes = plt.subplots(
+            1, len(datasets), figsize=(5.2 * len(datasets), 4.5),
+            squeeze=False, sharey=True,
+        )
+        for col, dataset in enumerate(datasets):
+            ax = coverage_axes[0, col]
             part = cov[cov.dataset == dataset]
-            axes[0].plot(part.x, part.empirical, marker="o", label=f"{dataset} empirical")
-            axes[0].plot(part.x, part.corrected_bound, linestyle="--", label=f"{dataset} corrected theory")
+            ax.plot(part.x, part.empirical, marker="o", label="Empirical")
+            ax.plot(part.x, part.corrected_bound, linestyle="--", label="Theoretical")
+            ax.set_title(display_names.get(dataset, dataset))
+            ax.set_xlabel("Number of test samples")
+            if col == 0:
+                ax.set_ylabel("Coverage")
+                ax.legend(loc="lower left")
+            ax.grid(alpha=0.25)
+        coverage_fig.tight_layout()
+        coverage_fig.savefig(output / "coverage.pdf", bbox_inches="tight")
+        coverage_fig.savefig(output / "coverage.png", dpi=180, bbox_inches="tight")
+        # Backward-compatible main figure name.
+        coverage_fig.savefig(output / "figure.pdf", bbox_inches="tight")
+        coverage_fig.savefig(output / "figure.png", dpi=180, bbox_inches="tight")
+        plt.close(coverage_fig)
+
+        # Prediction-size figure: again use one panel per dataset so datasets
+        # with very different size scales do not share one axis.
+        size_fig, size_axes = plt.subplots(
+            1, len(datasets), figsize=(5.2 * len(datasets), 4.5), squeeze=False,
+        )
+        for col, dataset in enumerate(datasets):
+            ax = size_axes[0, col]
             part = size[size.dataset == dataset]
-            axes[1].plot(part.x, part.average_size, marker="o", label=dataset)
-            axes[1].plot(part.x, part.budget, linestyle=":", color=axes[1].lines[-1].get_color())
-        axes[0].set(xlabel="Number of test samples", ylabel="Coverage")
-        axes[1].set(xlabel=r"Total calibration size $2n$", ylabel="Average prediction-set size")
+            ax.plot(part.x, part.average_size, marker="o", label="Average size")
+            ax.plot(part.x, part.budget, linestyle=":", label="Budget")
+            ax.set_title(display_names.get(dataset, dataset))
+            ax.set_xlabel(r"Total calibration size $2n$")
+            if col == 0:
+                ax.set_ylabel("Average prediction-set size")
+                ax.legend(loc="best")
+            ax.grid(alpha=0.25)
+        size_fig.tight_layout()
+        size_fig.savefig(output / "average_size.pdf", bbox_inches="tight")
+        size_fig.savefig(output / "average_size.png", dpi=180, bbox_inches="tight")
+        plt.close(size_fig)
+        return
     elif kind == "delta_ablation":
         fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
         avg = _mean(frame, ["dataset", "delta"], ["coverage", "corrected_bound", "average_size", "budget"])

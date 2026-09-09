@@ -8,11 +8,12 @@ from tscp.experiments import (
     collect_self_validation,
     loo_compare_report_table,
     loo_coverage_report_table,
+    make_figures,
     summarize_loo_compare,
 )
 
 
-def test_self_validation_collector_on_small_synthetic_data():
+def test_self_validation_collector_on_small_synthetic_data(tmp_path):
     root = Path(__file__).resolve().parents[2]
     config = load_config(root / "configs" / "experiments" / "self_validation_regression.yaml")
     config["datasets"] = ["synthetic_regression"]
@@ -41,6 +42,12 @@ def test_self_validation_collector_on_small_synthetic_data():
     np.testing.assert_allclose(
         coverage["corrected_bound"], coverage["reference_coverage"],
     )
+    make_figures(frame, config, tmp_path)
+    for name in (
+        "coverage.pdf", "coverage.png", "average_size.pdf", "average_size.png",
+        "figure.pdf", "figure.png",
+    ):
+        assert (tmp_path / name).is_file()
 
 
 def test_loo_comparison_uses_one_random_test_point_per_trial():

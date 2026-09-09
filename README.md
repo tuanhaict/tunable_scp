@@ -93,7 +93,7 @@ python scripts/run_suite.py --suite configs/suites/main_paper.yaml --smoke
 
 | Config | Output |
 |---|---|
-| `self_validation_*.yaml` | Empirical coverage vs. the independent-reference target `1-E[alpha]-E[Delta]`, and size vs. total calibration size |
+| `self_validation_*.yaml` | Separate `coverage.*` and `average_size.*` figures; `figure.*` aliases the coverage figure |
 | `delta_*.yaml` | Coverage and average size as functions of slack `delta` |
 | `compare_ecp_*.yaml` | Coverage-size comparison of TsCP variants and eCP |
 | `hard_constraint*.yaml` | Hard-constraint satisfaction tables |
