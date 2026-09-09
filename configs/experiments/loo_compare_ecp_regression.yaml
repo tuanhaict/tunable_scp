@@ -14,7 +14,7 @@ data:
   total_calibration_sizes: [500, 1000, 2000, 4000, 6000]
   fixed_number_test_samples: 1
 method:
-  delta: 0.001
+  delta: 0.1
 budget:
   value_by_dataset:
     synthetic_regression: 15.0
