@@ -968,20 +968,20 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 ax = axes[row, col]
                 part = frame[(frame.dataset == dataset) & (frame.calibration_size == size)]
                 show_legend = row == 0 and col == 0
-                ax.hist(part.test_corrected, bins=histogram_bins, alpha=0.55,
+                ax.hist(part.test_corrected, bins=histogram_bins, alpha=0.45,
                         label=r"$1-\hat\alpha_{\rm test}-\hat\delta_{\rm test}$" if show_legend else "_nolegend_",
                         color="tab:blue")
-                ax.hist(part.loo_coverage, bins=histogram_bins, alpha=0.55,
+                ax.hist(part.loo_coverage, bins=histogram_bins, alpha=0.45,
                         label=r"$1-\hat\alpha^{\mathrm{LOO}}-\hat\delta^{\mathrm{LOO}}$" if show_legend else "_nolegend_",
                         color="tab:orange")
                 ax.axvline(part.test_corrected.mean(), color="tab:blue", linestyle="--", linewidth=1.5)
                 ax.axvline(part.loo_coverage.mean(), color="tab:orange", linestyle="--", linewidth=1.5)
                 ax.set_xlim(histogram_bins[0], histogram_bins[-1])
                 if row == 0:
-                    ax.set_title(rf"$N_{{\mathrm{{cal}}}}=2n={size}$")
+                    ax.set_title(rf"$N_{{\mathrm{{cal}}}}={size}$")
                 if col == 0:
                     ax.set_ylabel(f"{_dataset_display_name(dataset)}\nFrequency")
-                if row == len(datasets) - 1:
+                if row == len(datasets) - 1 and col == 0:
                     ax.set_xlabel("Coverage")
                 if show_legend:
                     ax.legend(fontsize=7)
