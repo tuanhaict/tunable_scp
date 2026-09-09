@@ -619,6 +619,34 @@ def _mean(frame: pd.DataFrame, group: list[str], columns: list[str]) -> pd.DataF
     return frame.groupby(group, as_index=False)[columns].mean(numeric_only=True)
 
 
+_DATASET_DISPLAY_NAMES = {
+    "synthetic_regression": "SyntheticRegression",
+    "syntheticregression": "SyntheticRegression",
+    "california_housing": "CaliforniaHousing",
+    "californiahousing": "CaliforniaHousing",
+    "superconductivity": "Superconductivity",
+    "synthetic_classification": "SyntheticClassification",
+    "syntheticclassification": "SyntheticClassification",
+    "mnist": "MNIST",
+    "fashion_mnist": "FashionMNIST",
+    "covertype": "Covertype",
+    "adult": "Adult",
+    "electricity": "Electricity",
+    "year": "Year",
+    "diamonds": "Diamonds",
+    "allstate": "Allstate",
+    "minibone": "MiniBooNE",
+}
+
+
+def _dataset_display_name(dataset: str) -> str:
+    """Return the publication-facing name while preserving raw data keys."""
+    key = str(dataset)
+    return _DATASET_DISPLAY_NAMES.get(
+        key.lower(), "".join(part.capitalize() for part in key.split("_")),
+    )
+
+
 def _plot_figsize(config: dict, default: tuple[float, float]) -> tuple[float, float]:
     value = config.get("plot", {}).get("figsize")
     if value is None:
@@ -817,13 +845,6 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         cov = _mean(frame[frame.panel == "coverage"], ["dataset", "x"], ["empirical", "corrected_bound", "old_proxy"])
         size = _mean(frame[frame.panel == "size"], ["dataset", "x"], ["average_size", "budget"])
 
-        display_names = {
-            "synthetic_regression": "SyntheticRegression",
-            "california_housing": "CaliforniaHousing",
-            "synthetic_classification": "SyntheticClassification",
-            "mnist": "MNIST",
-        }
-
         # Coverage figure: one panel per dataset.  The empirical curve varies
         # with the test-batch prefix, whereas the independent-reference target
         # is constant in the number of test samples.
@@ -836,7 +857,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             part = cov[cov.dataset == dataset]
             ax.plot(part.x, part.empirical, marker="o", label="Empirical")
             ax.plot(part.x, part.corrected_bound, linestyle="--", label="Theoretical")
-            ax.set_title(display_names.get(dataset, dataset))
+            ax.set_title(_dataset_display_name(dataset))
             ax.set_xlabel("Number of test samples")
             if col == 0:
                 ax.set_ylabel("Coverage")
@@ -855,7 +876,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             part = size[size.dataset == dataset]
             ax.plot(part.x, part.average_size, marker="o", label="Average size")
             ax.plot(part.x, part.budget, linestyle=":", label="Budget")
-            ax.set_title(display_names.get(dataset, dataset))
+            ax.set_title(_dataset_display_name(dataset))
             ax.set_xlabel(r"Total calibration size $2n$")
             if col == 0:
                 ax.set_ylabel("Average prediction-set size")
@@ -868,9 +889,10 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         avg = _mean(frame, ["dataset", "delta"], ["coverage", "corrected_bound", "average_size", "budget"])
         for dataset in datasets:
             part = avg[avg.dataset == dataset]
-            axes[0].plot(part.delta, part.coverage, marker="o", label=f"{dataset} empirical")
-            axes[0].plot(part.delta, part.corrected_bound, linestyle="--", label=f"{dataset} corrected theory")
-            axes[1].plot(part.delta, part.average_size, marker="o", label=dataset)
+            display_name = _dataset_display_name(dataset)
+            axes[0].plot(part.delta, part.coverage, marker="o", label=f"{display_name} empirical")
+            axes[0].plot(part.delta, part.corrected_bound, linestyle="--", label=f"{display_name} corrected theory")
+            axes[1].plot(part.delta, part.average_size, marker="o", label=display_name)
             axes[1].plot(part.delta, part.budget, linestyle=":", color=axes[1].lines[-1].get_color())
         axes[0].set(xlabel=r"Slack $\delta$", ylabel="Coverage")
         axes[1].set(xlabel=r"Slack $\delta$", ylabel="Average prediction-set size")
@@ -888,9 +910,9 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 else:
                     ax.plot(group.coverage, group.average_size, marker="o", label=" / ".join(labels))
             if kind == "compare_ecp":
-                ax.set(title=dataset, xlabel="Pre-chosen set size", ylabel="Coverage")
+                ax.set(title=_dataset_display_name(dataset), xlabel="Pre-chosen set size", ylabel="Coverage")
             else:
-                ax.set(title=dataset, xlabel="Coverage", ylabel="Average prediction-set size")
+                ax.set(title=_dataset_display_name(dataset), xlabel="Coverage", ylabel="Average prediction-set size")
     elif kind == "model_ablation":
         fig, axes = plt.subplots(
             2, len(datasets), figsize=_plot_figsize(config, (6 * len(datasets), 8)), squeeze=False,
@@ -900,7 +922,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             for model, part in avg[avg.dataset == dataset].groupby("model"):
                 axes[0, col].plot(part.calibration_size, part.coverage, marker="o", label=model)
                 axes[1, col].plot(part.calibration_size, part.average_size, marker="o", label=model)
-            axes[0, col].set(title=dataset, xlabel=r"Total calibration size $2n$", ylabel="Coverage")
+            axes[0, col].set(title=_dataset_display_name(dataset), xlabel=r"Total calibration size $2n$", ylabel="Coverage")
             axes[1, col].set(xlabel=r"Total calibration size $2n$", ylabel="Average prediction-set size")
     elif kind == "runtime":
         fig, axes = plt.subplots(2, 3, figsize=_plot_figsize(config, (15, 8)), squeeze=False)
@@ -908,7 +930,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         for ax, dataset in zip(axes.flat, datasets):
             for method, part in avg[avg.dataset == dataset].groupby("method"):
                 ax.plot(part.number_test, part.runtime_seconds, marker="o", label=method)
-            ax.set(title=dataset, xlabel="Number of test samples", ylabel="Runtime (seconds)")
+            ax.set(title=_dataset_display_name(dataset), xlabel="Number of test samples", ylabel="Runtime (seconds)")
         for ax in axes.flat[len(datasets):]:
             ax.axis("off")
     elif kind == "loo_validation":
@@ -916,8 +938,9 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         avg = _mean(frame, ["dataset", "calibration_size"], ["alpha_abs_error", "delta_abs_error"])
         for dataset in datasets:
             part = avg[avg.dataset == dataset]
-            axes[0].plot(part.calibration_size, part.alpha_abs_error, marker="o", label=dataset)
-            axes[1].plot(part.calibration_size, part.delta_abs_error, marker="o", label=dataset)
+            display_name = _dataset_display_name(dataset)
+            axes[0].plot(part.calibration_size, part.alpha_abs_error, marker="o", label=display_name)
+            axes[1].plot(part.calibration_size, part.delta_abs_error, marker="o", label=display_name)
         axes[0].set(xlabel=r"Total calibration size $2n$", ylabel=r"$|\hat\alpha-E[\alpha]|$")
         axes[1].set(xlabel=r"Total calibration size $2n$", ylabel=r"$|\hat\Delta-E[\Delta]|$")
     elif kind == "loo_histogram":
@@ -925,9 +948,9 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         fig, axes = plt.subplots(
             len(datasets), len(calibration_sizes),
             figsize=_plot_figsize(config, (4.2 * len(calibration_sizes), 3.0 * len(datasets))),
-            squeeze=False, sharex=True,
+            squeeze=False, sharex=True, sharey=True,
         )
-        bins = int(config.get("experiment", {}).get("bins", 20))
+        bins = int(config.get("experiment", {}).get("bins", 30))
         # Compute the edges once for the complete grid.  Computing them inside
         # each panel makes equal-looking bars represent different intervals.
         all_values = np.concatenate([
@@ -957,7 +980,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 if row == 0:
                     ax.set_title(rf"$N_{{\mathrm{{cal}}}}=2n={size}$")
                 if col == 0:
-                    ax.set_ylabel(f"{dataset}\nFrequency")
+                    ax.set_ylabel(f"{_dataset_display_name(dataset)}\nFrequency")
                 if row == len(datasets) - 1:
                     ax.set_xlabel("Coverage")
                 if show_legend:
@@ -1000,7 +1023,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                     x, np.maximum(coverage_gap - coverage_gap_std, 0.0),
                     coverage_gap + coverage_gap_std, color=color, alpha=0.18,
                 )
-            axes[0, col].set_title(dataset)
+            axes[0, col].set_title(_dataset_display_name(dataset))
             axes[0, col].set_xscale("log")
             axes[0, col].set_yscale("log")
             axes[0, col].set_xlabel(r"Total calibration size $N_{\mathrm{cal}}=2n$")

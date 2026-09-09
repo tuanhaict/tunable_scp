@@ -4,7 +4,7 @@ experiment:
   name: loo_validation_classification
   type: loo_histogram
   trials: 200
-  bins: 20
+  bins: 30
 seeds: [0]
 datasets: [synthetic_classification, mnist, covertype]
 data:
