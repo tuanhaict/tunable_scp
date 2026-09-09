@@ -32,6 +32,7 @@ def test_self_validation_collector_on_small_synthetic_data(tmp_path):
     assert {"coverage", "size"} == set(frame["panel"])
     coverage = frame[frame["panel"] == "coverage"]
     assert coverage["corrected_bound"].notna().all()
+    np.testing.assert_array_equal(coverage["empirical_trials"], coverage["x"])
     assert coverage["expected_alpha"].notna().all()
     assert coverage["expected_delta"].notna().all()
     assert set(coverage["reference_trials"]) == {4}
@@ -45,7 +46,7 @@ def test_self_validation_collector_on_small_synthetic_data(tmp_path):
     make_figures(frame, config, tmp_path)
     for name in (
         "coverage.pdf", "coverage.png", "average_size.pdf", "average_size.png",
-        "figure.pdf", "figure.png",
+        "figure.pdf", "figure.png", "SyntheticRegression.pdf", "SyntheticRegression.png",
     ):
         assert (tmp_path / name).is_file()
 

@@ -87,13 +87,15 @@ def _theory_columns(result) -> dict:
 
 
 def collect_self_validation(config: dict) -> pd.DataFrame:
-    """Validate the corrected coverage identity against an independent test batch.
+    """Validate the corrected coverage identity with independent MC streams.
 
     The theoretical curve is estimated by an independent Monte Carlo stream.
     Every reference trial redraws the full calibration sample C=(D1,D2) and one
     test observation (X0,Y0), then records alpha_C(X0) and
     Delta_C(X0)=1{Y0 not in C_C(X0)}-alpha_C(X0).  In particular, this
-    experiment does not use a leave-one-out coverage estimate.
+    experiment does not use a leave-one-out coverage estimate.  The empirical
+    stream independently redraws the same pair (C,(X0,Y0)) on every trial and
+    reports prefix means at the configured numbers of test samples.
     """
     rows = []
     data_cfg = config["data"]
@@ -128,25 +130,13 @@ def collect_self_validation(config: dict) -> pd.DataFrame:
                     tie_break_epsilon, estimate_coverage=False,
                 )
 
-            # Ordinary empirical coverage: one fixed calibration draw and
-            # increasingly long prefixes of one independent test batch.
-            maximum = run_tscp(fixed_cal, max(test_sizes), int(seed) + 1000)
-
-            # Independent Monte Carlo estimate of E[alpha_C(X0)] and
-            # E[Delta_C(X0)].  Drawing the calibration indices first with the
-            # same seed mirrors the draw made internally by evaluate_*; the
-            # following RNG draw therefore selects the corresponding X0.
-            reference_alphas = []
-            reference_deltas = []
-            reference_covered = []
-            for reference_trial in range(reference_trials):
-                reference_seed = (
-                    1_000_000_000 + int(seed) * 10_000_000
-                    + fixed_cal * 1_000 + reference_trial
-                )
-                reference_rng = np.random.default_rng(reference_seed)
-                reference_rng.choice(len(split.y_cal), fixed_cal, replace=False)
-                test_index = int(reference_rng.integers(0, len(split.y_test)))
+            def run_one_random_pair(calibration_size: int, run_seed: int):
+                """Redraw C=(D1,D2) and one independent test observation."""
+                pair_rng = np.random.default_rng(run_seed)
+                # evaluate_* initializes the same RNG and therefore redraws
+                # exactly these calibration indices internally.
+                pair_rng.choice(len(split.y_cal), calibration_size, replace=False)
+                test_index = int(pair_rng.integers(0, len(split.y_test)))
                 trial_split = replace(
                     split,
                     x_test=split.x_test[[test_index]],
@@ -163,9 +153,36 @@ def collect_self_validation(config: dict) -> pd.DataFrame:
                         fitted,
                         probs_test=fitted.probs_test[[test_index]],
                     )
-                reference = run_tscp(
-                    fixed_cal, 1, reference_seed, trial_split, trial_fitted,
+                return run_tscp(
+                    calibration_size, 1, run_seed, trial_split, trial_fitted,
                 )
+
+            # Marginal empirical coverage. Trial r redraws both C_r and X_0,r;
+            # the configured test counts are nested prefixes of this stream.
+            empirical_covered = []
+            empirical_sizes = []
+            for empirical_trial in range(max(map(int, test_sizes))):
+                empirical_seed = (
+                    2_000_000_000 + int(seed) * 10_000_000
+                    + fixed_cal * 1_000 + empirical_trial
+                )
+                empirical_result = run_one_random_pair(fixed_cal, empirical_seed)
+                empirical_covered.append(float(empirical_result.covered[0]))
+                empirical_sizes.append(float(empirical_result.sizes[0]))
+            empirical_covered = np.asarray(empirical_covered, dtype=float)
+            empirical_sizes = np.asarray(empirical_sizes, dtype=float)
+
+            # Independent Monte Carlo estimate of E[alpha_C(X0)] and
+            # E[Delta_C(X0)] on a seed stream disjoint from the empirical one.
+            reference_alphas = []
+            reference_deltas = []
+            reference_covered = []
+            for reference_trial in range(reference_trials):
+                reference_seed = (
+                    1_000_000_000 + int(seed) * 10_000_000
+                    + fixed_cal * 1_000 + reference_trial
+                )
+                reference = run_one_random_pair(fixed_cal, reference_seed)
                 alpha_value = float(reference.alphas[0])
                 covered_value = float(reference.covered[0])
                 reference_alphas.append(alpha_value)
@@ -186,9 +203,11 @@ def collect_self_validation(config: dict) -> pd.DataFrame:
             }
 
             for count in test_sizes:
-                count = min(int(count), len(maximum.covered))
+                count = int(count)
                 rows.append({"panel": "coverage", "dataset": dataset, "seed": seed, "x": count,
-                             "empirical": float(maximum.covered[:count].mean()), "average_size": float(maximum.sizes[:count].mean()),
+                             "empirical": float(empirical_covered[:count].mean()),
+                             "average_size": float(empirical_sizes[:count].mean()),
+                             "empirical_trials": count,
                              **theory_columns})
             for size in cal_sizes:
                 result = run_tscp(int(size), fixed_test, int(seed) + 1000)
@@ -883,6 +902,63 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 ax.legend(loc="best")
             ax.grid(alpha=0.25)
         _save_figure(size_fig, output, "average_size", config)
+
+        # Also export one publication-ready 1x2 figure per dataset.  The raw
+        # dataset key remains in metrics.csv; the display name is used only as
+        # the filename.  No panel title is added.
+        size_stats = (
+            frame[frame.panel == "size"]
+            .groupby(["dataset", "x"], as_index=False)
+            .agg(
+                average_size=("average_size", "mean"),
+                average_size_std=("average_size", "std"),
+                budget=("budget", "mean"),
+            )
+        )
+        size_stats["average_size_std"] = size_stats["average_size_std"].fillna(0.0)
+        for dataset in datasets:
+            dataset_fig, dataset_axes = plt.subplots(
+                1, 2, figsize=_plot_figsize(config, (10.0, 4.0)), squeeze=False,
+            )
+            coverage_ax, size_ax = dataset_axes[0]
+
+            coverage_part = cov[cov.dataset == dataset].sort_values("x")
+            coverage_ax.plot(
+                coverage_part.x, coverage_part.empirical,
+                marker="o", label="Empirical",
+            )
+            coverage_ax.plot(
+                coverage_part.x, coverage_part.corrected_bound,
+                linestyle="--", label="Theoretical",
+            )
+            coverage_ax.set_xlabel("Number of test samples")
+            coverage_ax.set_ylabel("Coverage")
+            coverage_ax.legend(loc="upper right")
+            coverage_ax.grid(alpha=0.25)
+
+            size_part = size_stats[size_stats.dataset == dataset].sort_values("x")
+            x_values = size_part.x.to_numpy(dtype=float)
+            size_mean = size_part.average_size.to_numpy(dtype=float)
+            size_std = size_part.average_size_std.to_numpy(dtype=float)
+            mean_line, = size_ax.plot(
+                x_values, size_mean, marker="o", label="Mean over seeds",
+            )
+            size_ax.fill_between(
+                x_values, size_mean - size_std, size_mean + size_std,
+                color=mean_line.get_color(), alpha=0.2,
+            )
+            size_ax.plot(
+                x_values, size_part.budget.to_numpy(dtype=float),
+                linestyle=":", label="Pre-chosen set size",
+            )
+            size_ax.set_xlabel(r"Total calibration size $(2 \times n)$")
+            size_ax.set_ylabel("Average set size")
+            size_ax.legend(loc="upper right")
+            size_ax.grid(alpha=0.25)
+
+            _save_figure(
+                dataset_fig, output, _dataset_display_name(dataset), config,
+            )
         return
     elif kind == "delta_ablation":
         fig, axes = plt.subplots(1, 2, figsize=_plot_figsize(config, (12, 4.5)))

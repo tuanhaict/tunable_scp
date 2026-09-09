@@ -120,7 +120,7 @@ python scripts/run_suite.py --suite configs/suites/main_paper.yaml --smoke
 
 | Config | Output |
 |---|---|
-| `self_validation_*.yaml` | Separate `coverage.*` and `average_size.*` figures; `figure.*` aliases the coverage figure |
+| `self_validation_*.yaml` | Separate `coverage.*`, `average_size.*`, and title-free per-dataset 1x2 figures; `figure.*` aliases coverage |
 | `delta_*.yaml` | Coverage and average size as functions of slack `delta` |
 | `compare_ecp_*.yaml` | Coverage-size comparison of TsCP variants and eCP |
 | `hard_constraint*.yaml` | Hard-constraint satisfaction tables |
@@ -206,7 +206,9 @@ reference trial redraws the calibration sample `C=(D1,D2)` and one test point
 `(X0,Y0)`. It records `alpha_C(X0)` and
 `Delta_C(X0) = 1{Y0 not in C_C(X0)} - alpha_C(X0)`, and the plotted target is
 `1 - mean(reference alpha) - mean(reference Delta)`. The number of Monte Carlo
-draws is controlled by `experiment.reference_trials`.
+draws is controlled by `experiment.reference_trials`. The empirical curve uses
+a second, disjoint Monte Carlo stream: its point at `m` test samples is the mean
+of `m` trials, each of which independently redraws both `C` and `(X0,Y0)`.
 
 The dedicated LOO experiments use the estimator below.
 
