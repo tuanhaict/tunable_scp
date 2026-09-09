@@ -1044,8 +1044,8 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         loo_compare_report_table(summary).to_csv(output / "loo_compare_points.csv", index=False)
         loo_coverage_report_table(summary).to_csv(output / "loo_coverage_points.csv", index=False)
         styles = {
-            "truncated_eCP": ("tab:blue", "o", r"truncated eCP: $1-\hat\alpha^{LOO}$"),
-            "TsCP": ("tab:orange", "s", r"TsCP: $1-\hat\alpha^{LOO}-\hat\delta^{LOO}$"),
+            "truncated_eCP": ("tab:blue", "o", r"eCP"),
+            "TsCP": ("tab:orange", "s", r"TsCP"),
         }
         for col, dataset in enumerate(datasets):
             ax = axes[0, col]
@@ -1061,7 +1061,8 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                     coverage_gap + coverage_gap_std, color=color, alpha=0.18,
                 )
             ax.set_title(_dataset_display_name(dataset))
-            ax.set_xlabel(r"Total calibration size $N_{\mathrm{cal}}=2n$")
+            if col == 0:
+                ax.set_xlabel(r"Calibration size")
             if col == 0:
                 ax.set_ylabel(r"$|\widehat{\mathrm{Coverage}}-\mathrm{Coverage}_{emp}|$")
                 ax.legend()
