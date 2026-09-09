@@ -30,3 +30,18 @@ data:
 
 output:
   root: outputs
+
+plot:
+  figsize: null
+  xlim: null
+  ylim: null
+  font_size: null
+  title_font_size: null
+  label_font_size: null
+  tick_font_size: null
+  legend_font_size: null
+  line_width: null
+  marker_size: null
+  dpi: 180
+  max_x_ticks: 3
+  max_y_ticks: 3

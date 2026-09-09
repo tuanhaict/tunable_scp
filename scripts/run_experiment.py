@@ -9,7 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from tscp.config import apply_overrides, dump_config, load_config
+from tscp.config import add_plot_arguments, apply_overrides, apply_plot_arguments, dump_config, load_config
 from tscp.experiments import COLLECTORS, environment_metadata, make_figures, write_hard_table
 
 
@@ -18,9 +18,11 @@ def main() -> Path:
     parser.add_argument("--config", required=True)
     parser.add_argument("--set", action="append", default=[], dest="overrides", help="Override a dotted YAML key, e.g. method.delta=0.2")
     parser.add_argument("--smoke", action="store_true", help="Use one seed, small synthetic data, calibration and test sizes.")
+    add_plot_arguments(parser)
     args = parser.parse_args()
 
     config = apply_overrides(load_config(args.config), args.overrides)
+    config = apply_plot_arguments(config, args)
     if args.smoke:
         task = config.get("task", "regression")
         synthetic = "synthetic_regression" if task == "regression" else "synthetic_classification"

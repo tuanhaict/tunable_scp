@@ -6,6 +6,23 @@ from typing import Any
 import yaml
 
 
+PLOT_ARGUMENTS = (
+    ("figsize", "figsize"),
+    ("xlim", "xlim"),
+    ("ylim", "ylim"),
+    ("font_size", "font_size"),
+    ("title_font_size", "title_font_size"),
+    ("label_font_size", "label_font_size"),
+    ("tick_font_size", "tick_font_size"),
+    ("legend_font_size", "legend_font_size"),
+    ("line_width", "line_width"),
+    ("marker_size", "marker_size"),
+    ("dpi", "dpi"),
+    ("max_x_ticks", "max_x_ticks"),
+    ("max_y_ticks", "max_y_ticks"),
+)
+
+
 def _merge(base: dict, update: dict) -> dict:
     result = deepcopy(base)
     for key, value in update.items():
@@ -47,3 +64,46 @@ def dump_config(config: dict, path: str | Path) -> None:
     with Path(path).open("w", encoding="utf-8") as handle:
         yaml.safe_dump(config, handle, sort_keys=False, allow_unicode=True)
 
+
+def add_plot_arguments(parser) -> None:
+    """Add the shared figure-style flags to an argparse parser."""
+    parser.add_argument("--figsize", nargs=2, type=float, metavar=("WIDTH", "HEIGHT"))
+    parser.add_argument("--xlim", nargs=2, type=float, metavar=("MIN", "MAX"))
+    parser.add_argument("--ylim", nargs=2, type=float, metavar=("MIN", "MAX"))
+    parser.add_argument("--font-size", type=float, help="Base font size; specific font flags override it.")
+    parser.add_argument("--title-font-size", type=float)
+    parser.add_argument("--label-font-size", type=float)
+    parser.add_argument("--tick-font-size", type=float)
+    parser.add_argument("--legend-font-size", type=float)
+    parser.add_argument("--line-width", type=float)
+    parser.add_argument("--marker-size", type=float)
+    parser.add_argument("--dpi", type=int, help="DPI for PNG output.")
+    parser.add_argument("--max-x-ticks", type=int, help="Maximum intervals on linear x axes.")
+    parser.add_argument("--max-y-ticks", type=int, help="Maximum intervals on linear y axes.")
+
+
+def apply_plot_arguments(config: dict, args) -> dict:
+    """Overlay explicitly supplied plotting flags on a loaded config."""
+    result = deepcopy(config)
+    plot = result.setdefault("plot", {})
+    for attribute, key in PLOT_ARGUMENTS:
+        value = getattr(args, attribute, None)
+        if value is not None:
+            plot[key] = list(value) if attribute in {"figsize", "xlim", "ylim"} else value
+    return result
+
+
+def forward_plot_arguments(args) -> list[str]:
+    """Serialize supplied plotting flags for a child run_experiment process."""
+    tokens: list[str] = []
+    for attribute, _ in PLOT_ARGUMENTS:
+        value = getattr(args, attribute, None)
+        if value is None:
+            continue
+        flag = "--" + attribute.replace("_", "-")
+        tokens.append(flag)
+        if attribute in {"figsize", "xlim", "ylim"}:
+            tokens.extend(str(item) for item in value)
+        else:
+            tokens.append(str(value))
+    return tokens

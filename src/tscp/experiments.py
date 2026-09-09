@@ -9,6 +9,7 @@ import time
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.collections import PathCollection
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 import pandas as pd
@@ -618,6 +619,98 @@ def _mean(frame: pd.DataFrame, group: list[str], columns: list[str]) -> pd.DataF
     return frame.groupby(group, as_index=False)[columns].mean(numeric_only=True)
 
 
+def _plot_figsize(config: dict, default: tuple[float, float]) -> tuple[float, float]:
+    value = config.get("plot", {}).get("figsize")
+    if value is None:
+        return default
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise ValueError("plot.figsize must contain [width, height].")
+    width, height = map(float, value)
+    if width <= 0 or height <= 0:
+        raise ValueError("Figure width and height must be positive.")
+    return width, height
+
+
+def _apply_figure_style(fig, config: dict) -> None:
+    """Apply YAML/CLI figure options after all artists have been created."""
+    plot = config.get("plot", {})
+    base_font = plot.get("font_size")
+
+    def font_value(key: str):
+        value = plot.get(key)
+        return base_font if value is None else value
+
+    title_font = font_value("title_font_size")
+    label_font = font_value("label_font_size")
+    tick_font = font_value("tick_font_size")
+    legend_font = font_value("legend_font_size")
+    line_width = plot.get("line_width")
+    marker_size = plot.get("marker_size")
+    xlim = plot.get("xlim")
+    ylim = plot.get("ylim")
+    max_x_ticks = plot.get("max_x_ticks")
+    max_y_ticks = plot.get("max_y_ticks")
+
+    def axis_limits(value, name: str):
+        if value is None:
+            return None
+        if not isinstance(value, (list, tuple)) or len(value) != 2:
+            raise ValueError(f"plot.{name} must contain [minimum, maximum].")
+        lower, upper = map(float, value)
+        if not np.isfinite(lower) or not np.isfinite(upper) or lower >= upper:
+            raise ValueError(f"plot.{name} must contain two finite values with minimum < maximum.")
+        return lower, upper
+
+    x_limits = axis_limits(xlim, "xlim")
+    y_limits = axis_limits(ylim, "ylim")
+
+    for ax in fig.axes:
+        if title_font is not None:
+            ax.title.set_fontsize(float(title_font))
+        if label_font is not None:
+            ax.xaxis.label.set_fontsize(float(label_font))
+            ax.yaxis.label.set_fontsize(float(label_font))
+        if tick_font is not None:
+            ax.tick_params(axis="both", labelsize=float(tick_font))
+        if x_limits is not None:
+            ax.set_xlim(*x_limits)
+        if y_limits is not None:
+            ax.set_ylim(*y_limits)
+        if max_x_ticks is not None and ax.get_xscale() == "linear":
+            ax.xaxis.set_major_locator(MaxNLocator(nbins=int(max_x_ticks)))
+        if max_y_ticks is not None and ax.get_yscale() == "linear":
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=int(max_y_ticks)))
+        if line_width is not None:
+            for line in ax.lines:
+                line.set_linewidth(float(line_width))
+        if marker_size is not None:
+            for line in ax.lines:
+                if line.get_marker() not in (None, "None", "", " "):
+                    line.set_markersize(float(marker_size))
+            for collection in ax.collections:
+                if isinstance(collection, PathCollection):
+                    collection.set_sizes([float(marker_size) ** 2])
+        legend = ax.get_legend()
+        if legend is not None and legend_font is not None:
+            for text_item in legend.get_texts():
+                text_item.set_fontsize(float(legend_font))
+            if legend.get_title() is not None:
+                legend.get_title().set_fontsize(float(legend_font))
+
+
+def _save_figure(fig, output: Path, stems: str | tuple[str, ...], config: dict) -> None:
+    _apply_figure_style(fig, config)
+    fig.tight_layout()
+    dpi = int(config.get("plot", {}).get("dpi", 180))
+    if dpi <= 0:
+        raise ValueError("plot.dpi must be positive.")
+    names = (stems,) if isinstance(stems, str) else stems
+    for stem in names:
+        fig.savefig(output / f"{stem}.pdf", bbox_inches="tight")
+        fig.savefig(output / f"{stem}.png", dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+
+
 def summarize_loo_compare(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return the per-seed and plotted point tables for the LOO comparison."""
     groups = ["dataset", "method", "calibration_size", "outer_seed"]
@@ -735,7 +828,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         # with the test-batch prefix, whereas the independent-reference target
         # is constant in the number of test samples.
         coverage_fig, coverage_axes = plt.subplots(
-            1, len(datasets), figsize=(5.2 * len(datasets), 4.5),
+            1, len(datasets), figsize=_plot_figsize(config, (5.2 * len(datasets), 4.5)),
             squeeze=False, sharey=True,
         )
         for col, dataset in enumerate(datasets):
@@ -743,47 +836,35 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             part = cov[cov.dataset == dataset]
             ax.plot(part.x, part.empirical, marker="o", label="Empirical")
             ax.plot(part.x, part.corrected_bound, linestyle="--", label="Theoretical")
-            ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
-            ax.yaxis.set_major_locator(MaxNLocator(nbins=3))
             ax.set_title(display_names.get(dataset, dataset))
             ax.set_xlabel("Number of test samples")
             if col == 0:
                 ax.set_ylabel("Coverage")
                 ax.legend(loc="lower left")
             ax.grid(alpha=0.25)
-        coverage_fig.tight_layout()
-        coverage_fig.savefig(output / "coverage.pdf", bbox_inches="tight")
-        coverage_fig.savefig(output / "coverage.png", dpi=180, bbox_inches="tight")
-        # Backward-compatible main figure name.
-        coverage_fig.savefig(output / "figure.pdf", bbox_inches="tight")
-        coverage_fig.savefig(output / "figure.png", dpi=180, bbox_inches="tight")
-        plt.close(coverage_fig)
+        # "figure" is retained as a backward-compatible alias.
+        _save_figure(coverage_fig, output, ("coverage", "figure"), config)
 
         # Prediction-size figure: again use one panel per dataset so datasets
         # with very different size scales do not share one axis.
         size_fig, size_axes = plt.subplots(
-            1, len(datasets), figsize=(5.2 * len(datasets), 4.5), squeeze=False,
+            1, len(datasets), figsize=_plot_figsize(config, (5.2 * len(datasets), 4.5)), squeeze=False,
         )
         for col, dataset in enumerate(datasets):
             ax = size_axes[0, col]
             part = size[size.dataset == dataset]
             ax.plot(part.x, part.average_size, marker="o", label="Average size")
             ax.plot(part.x, part.budget, linestyle=":", label="Budget")
-            ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
-            ax.yaxis.set_major_locator(MaxNLocator(nbins=3))
             ax.set_title(display_names.get(dataset, dataset))
             ax.set_xlabel(r"Total calibration size $2n$")
             if col == 0:
                 ax.set_ylabel("Average prediction-set size")
                 ax.legend(loc="best")
             ax.grid(alpha=0.25)
-        size_fig.tight_layout()
-        size_fig.savefig(output / "average_size.pdf", bbox_inches="tight")
-        size_fig.savefig(output / "average_size.png", dpi=180, bbox_inches="tight")
-        plt.close(size_fig)
+        _save_figure(size_fig, output, "average_size", config)
         return
     elif kind == "delta_ablation":
-        fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+        fig, axes = plt.subplots(1, 2, figsize=_plot_figsize(config, (12, 4.5)))
         avg = _mean(frame, ["dataset", "delta"], ["coverage", "corrected_bound", "average_size", "budget"])
         for dataset in datasets:
             part = avg[avg.dataset == dataset]
@@ -794,7 +875,9 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         axes[0].set(xlabel=r"Slack $\delta$", ylabel="Coverage")
         axes[1].set(xlabel=r"Slack $\delta$", ylabel="Average prediction-set size")
     elif kind in {"compare_ecp", "budget_ablation"}:
-        fig, axes = plt.subplots(1, len(datasets), figsize=(6 * len(datasets), 4.5), squeeze=False)
+        fig, axes = plt.subplots(
+            1, len(datasets), figsize=_plot_figsize(config, (6 * len(datasets), 4.5)), squeeze=False,
+        )
         key = "variant" if kind == "compare_ecp" else "budget_type"
         avg = _mean(frame, ["dataset", key, "method"] + (["budget"] if kind == "compare_ecp" else []), ["coverage", "average_size"])
         for ax, dataset in zip(axes[0], datasets):
@@ -809,7 +892,9 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             else:
                 ax.set(title=dataset, xlabel="Coverage", ylabel="Average prediction-set size")
     elif kind == "model_ablation":
-        fig, axes = plt.subplots(2, len(datasets), figsize=(6 * len(datasets), 8), squeeze=False)
+        fig, axes = plt.subplots(
+            2, len(datasets), figsize=_plot_figsize(config, (6 * len(datasets), 8)), squeeze=False,
+        )
         avg = _mean(frame, ["dataset", "model", "calibration_size"], ["coverage", "average_size", "corrected_bound"])
         for col, dataset in enumerate(datasets):
             for model, part in avg[avg.dataset == dataset].groupby("model"):
@@ -818,7 +903,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             axes[0, col].set(title=dataset, xlabel=r"Total calibration size $2n$", ylabel="Coverage")
             axes[1, col].set(xlabel=r"Total calibration size $2n$", ylabel="Average prediction-set size")
     elif kind == "runtime":
-        fig, axes = plt.subplots(2, 3, figsize=(15, 8), squeeze=False)
+        fig, axes = plt.subplots(2, 3, figsize=_plot_figsize(config, (15, 8)), squeeze=False)
         avg = _mean(frame, ["dataset", "method", "number_test"], ["runtime_seconds"])
         for ax, dataset in zip(axes.flat, datasets):
             for method, part in avg[avg.dataset == dataset].groupby("method"):
@@ -827,7 +912,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         for ax in axes.flat[len(datasets):]:
             ax.axis("off")
     elif kind == "loo_validation":
-        fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+        fig, axes = plt.subplots(1, 2, figsize=_plot_figsize(config, (12, 4.5)))
         avg = _mean(frame, ["dataset", "calibration_size"], ["alpha_abs_error", "delta_abs_error"])
         for dataset in datasets:
             part = avg[avg.dataset == dataset]
@@ -839,7 +924,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         calibration_sizes = [int(value) for value in config["data"]["total_calibration_sizes"]]
         fig, axes = plt.subplots(
             len(datasets), len(calibration_sizes),
-            figsize=(4.2 * len(calibration_sizes), 3.0 * len(datasets)),
+            figsize=_plot_figsize(config, (4.2 * len(calibration_sizes), 3.0 * len(datasets))),
             squeeze=False, sharex=True,
         )
         bins = int(config.get("experiment", {}).get("bins", 20))
@@ -878,7 +963,9 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 if show_legend:
                     ax.legend(fontsize=7)
     elif kind == "loo_compare_ecp":
-        fig, axes = plt.subplots(3, len(datasets), figsize=(5.2 * len(datasets), 10.0), squeeze=False)
+        fig, axes = plt.subplots(
+            3, len(datasets), figsize=_plot_figsize(config, (5.2 * len(datasets), 10.0)), squeeze=False,
+        )
         per_seed, summary = summarize_loo_compare(frame)
         per_seed.to_csv(output / "loo_compare_points_by_seed.csv", index=False)
         loo_compare_report_table(summary).to_csv(output / "loo_compare_points.csv", index=False)
@@ -933,10 +1020,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             handles, labels = ax.get_legend_handles_labels()
             if labels:
                 ax.legend(fontsize=7)
-    fig.tight_layout()
-    fig.savefig(output / "figure.pdf", bbox_inches="tight")
-    fig.savefig(output / "figure.png", dpi=180, bbox_inches="tight")
-    plt.close(fig)
+    _save_figure(fig, output, "figure", config)
 
 
 def write_hard_table(frame: pd.DataFrame, output: Path) -> None:
