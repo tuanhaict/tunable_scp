@@ -969,10 +969,11 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 label="Theoretical" if col == 0 else "_nolegend_",
             )
             coverage_ax.set_title(_dataset_display_name(dataset))
-            coverage_ax.set_xlabel(r"Slack $\delta$")
+            
             if col == 0:
                 coverage_ax.set_ylabel("Coverage")
                 coverage_ax.legend(loc="best")
+                coverage_ax.set_xlabel(r"Slack $\delta$")
 
             size_mean = part.average_size.to_numpy(dtype=float)
             size_std = part.average_size_std.to_numpy(dtype=float)
