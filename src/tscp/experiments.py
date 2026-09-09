@@ -1055,7 +1055,8 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 x = part.calibration_size.to_numpy(dtype=float)
                 coverage_gap = part.coverage_gap_mean.to_numpy(dtype=float)
                 coverage_gap_std = part.coverage_gap_std.to_numpy(dtype=float)
-                ax.plot(x, coverage_gap, color=color, marker=marker, label=label)
+                plot_label = label if col == 0 else "_nolegend_"
+                ax.plot(x, coverage_gap, color=color, marker=marker, label=plot_label)
                 ax.fill_between(
                     x, np.maximum(coverage_gap - coverage_gap_std, 0.0),
                     coverage_gap + coverage_gap_std, color=color, alpha=0.18,
