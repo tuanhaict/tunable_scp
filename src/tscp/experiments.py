@@ -9,6 +9,7 @@ import time
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 import pandas as pd
 
@@ -742,6 +743,8 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             part = cov[cov.dataset == dataset]
             ax.plot(part.x, part.empirical, marker="o", label="Empirical")
             ax.plot(part.x, part.corrected_bound, linestyle="--", label="Theoretical")
+            ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=3))
             ax.set_title(display_names.get(dataset, dataset))
             ax.set_xlabel("Number of test samples")
             if col == 0:
@@ -766,6 +769,8 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             part = size[size.dataset == dataset]
             ax.plot(part.x, part.average_size, marker="o", label="Average size")
             ax.plot(part.x, part.budget, linestyle=":", label="Budget")
+            ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=3))
             ax.set_title(display_names.get(dataset, dataset))
             ax.set_xlabel(r"Total calibration size $2n$")
             if col == 0:
