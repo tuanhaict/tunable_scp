@@ -1006,10 +1006,11 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 color=mean_line.get_color(),
                 label="Pre-chosen set size" if col == 0 else "_nolegend_",
             )
-            size_ax.set_xlabel(r"Slack $\delta$")
+            
             if col == 0:
                 size_ax.set_ylabel("Average set size")
                 size_ax.legend(loc="best")
+                size_ax.set_xlabel(r"Slack $\delta$")
     elif kind in {"compare_ecp", "budget_ablation"}:
         fig, axes = plt.subplots(
             1, len(datasets), figsize=_plot_figsize(config, (6 * len(datasets), 4.5)), squeeze=False,
