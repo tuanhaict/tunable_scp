@@ -9,7 +9,7 @@ method:
   type: tscp
   score: one_minus_probability
   tie_break_epsilon: 1.0e-12
-  delta: 0.1
+  delta: 0.001
   alpha_grid:
     start: 0.01
     stop: 0.99
