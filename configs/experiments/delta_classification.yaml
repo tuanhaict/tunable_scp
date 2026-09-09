@@ -3,7 +3,11 @@ task: classification
 experiment:
   name: delta_ablation_classification
   type: delta_ablation
-  deltas: [1.01, 1.1, 1.25, 1.5, 1.75]
+  delta_steps: 10
+  delta_ranges:
+    synthetic_classification: [1.0, 3.0]
+    mnist: [1.0, 2.0]
+    covertype: [1.0, 2.0]
 datasets: [synthetic_classification, mnist, covertype]
 budget:
   value_by_dataset:

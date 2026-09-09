@@ -131,7 +131,13 @@ python scripts/run_suite.py --suite configs/suites/main_paper.yaml --smoke
 | `budget_ablation.yaml` | Constant, linear, quadratic, and exponential budgets |
 | `model_ablation_*.yaml` | Coverage and set size vs. total calibration size for multiple models |
 | `loo_validation_*.yaml` | Histograms of independent-test coverage and the corrected LOO estimate `1-alpha_hat_LOO-delta_hat_LOO` |
-| `loo_compare_ecp_*.yaml` | Variance and absolute-error comparison: truncated eCP uses `alpha_hat_LOO`, TsCP uses `alpha_hat_LOO + delta_hat_LOO` |
+| `loo_compare_ecp_*.yaml` | LOO-estimator variance tables and estimated-vs-empirical coverage-gap figures |
+
+Delta ablations support dataset-specific linspace grids via
+`experiment.delta_ranges.<dataset>: [start, stop]` and
+`experiment.delta_steps`. Both endpoints are included. An explicit legacy
+`experiment.deltas` list remains supported for datasets without a configured
+range.
 
 Run the revised LOO estimator comparison with:
 

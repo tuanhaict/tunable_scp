@@ -220,10 +220,26 @@ def collect_self_validation(config: dict) -> pd.DataFrame:
 def collect_delta_ablation(config: dict) -> pd.DataFrame:
     rows = []
     for dataset in config["datasets"]:
+        experiment = config.get("experiment", {})
+        ranges = experiment.get("delta_ranges", {})
+        if dataset in ranges:
+            bounds = ranges[dataset]
+            if not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
+                raise ValueError(f"delta_ranges.{dataset} must contain [start, stop].")
+            start, stop = map(float, bounds)
+            if start > stop:
+                raise ValueError(f"delta_ranges.{dataset} must satisfy start <= stop.")
+            steps_config = experiment.get("delta_steps", 10)
+            steps = int(steps_config.get(dataset, 10) if isinstance(steps_config, dict) else steps_config)
+            if steps < 2:
+                raise ValueError("delta_steps must be at least 2 when using a range.")
+            delta_values = np.linspace(start, stop, steps)
+        else:
+            delta_values = np.asarray(experiment["deltas"], dtype=float)
         for seed in config["seeds"]:
-            for delta in config["experiment"]["deltas"]:
+            for delta in delta_values:
                 _, result = evaluate(config, dataset, seed, delta=float(delta))
-                rows.append({"dataset": dataset, "seed": seed, "delta": delta, "coverage": result.coverage,
+                rows.append({"dataset": dataset, "seed": seed, "delta": float(delta), "coverage": result.coverage,
                              "average_size": result.average_size, "budget": float(result.budgets.mean()),
                              "hard_accuracy": result.hard_constraint_accuracy, **_theory_columns(result)})
     return pd.DataFrame(rows)
