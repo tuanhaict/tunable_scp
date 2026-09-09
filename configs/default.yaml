@@ -35,6 +35,10 @@ plot:
   figsize: null
   xlim: null
   ylim: null
+  coverage_xlim: null
+  coverage_ylim: null
+  size_xlim: null
+  size_ylim: null
   font_size: null
   title_font_size: null
   label_font_size: null

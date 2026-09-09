@@ -10,6 +10,10 @@ PLOT_ARGUMENTS = (
     ("figsize", "figsize"),
     ("xlim", "xlim"),
     ("ylim", "ylim"),
+    ("coverage_xlim", "coverage_xlim"),
+    ("coverage_ylim", "coverage_ylim"),
+    ("size_xlim", "size_xlim"),
+    ("size_ylim", "size_ylim"),
     ("font_size", "font_size"),
     ("title_font_size", "title_font_size"),
     ("label_font_size", "label_font_size"),
@@ -21,6 +25,11 @@ PLOT_ARGUMENTS = (
     ("max_x_ticks", "max_x_ticks"),
     ("max_y_ticks", "max_y_ticks"),
 )
+
+PAIR_PLOT_ARGUMENTS = {
+    "figsize", "xlim", "ylim", "coverage_xlim", "coverage_ylim",
+    "size_xlim", "size_ylim",
+}
 
 
 def _merge(base: dict, update: dict) -> dict:
@@ -70,6 +79,10 @@ def add_plot_arguments(parser) -> None:
     parser.add_argument("--figsize", nargs=2, type=float, metavar=("WIDTH", "HEIGHT"))
     parser.add_argument("--xlim", nargs=2, type=float, metavar=("MIN", "MAX"))
     parser.add_argument("--ylim", nargs=2, type=float, metavar=("MIN", "MAX"))
+    parser.add_argument("--coverage-xlim", nargs=2, type=float, metavar=("MIN", "MAX"))
+    parser.add_argument("--coverage-ylim", nargs=2, type=float, metavar=("MIN", "MAX"))
+    parser.add_argument("--size-xlim", nargs=2, type=float, metavar=("MIN", "MAX"))
+    parser.add_argument("--size-ylim", nargs=2, type=float, metavar=("MIN", "MAX"))
     parser.add_argument("--font-size", type=float, help="Base font size; specific font flags override it.")
     parser.add_argument("--title-font-size", type=float)
     parser.add_argument("--label-font-size", type=float)
@@ -89,7 +102,7 @@ def apply_plot_arguments(config: dict, args) -> dict:
     for attribute, key in PLOT_ARGUMENTS:
         value = getattr(args, attribute, None)
         if value is not None:
-            plot[key] = list(value) if attribute in {"figsize", "xlim", "ylim"} else value
+            plot[key] = list(value) if attribute in PAIR_PLOT_ARGUMENTS else value
     return result
 
 
@@ -102,7 +115,7 @@ def forward_plot_arguments(args) -> list[str]:
             continue
         flag = "--" + attribute.replace("_", "-")
         tokens.append(flag)
-        if attribute in {"figsize", "xlim", "ylim"}:
+        if attribute in PAIR_PLOT_ARGUMENTS:
             tokens.extend(str(item) for item in value)
         else:
             tokens.append(str(value))

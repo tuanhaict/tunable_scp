@@ -693,8 +693,6 @@ def _apply_figure_style(fig, config: dict) -> None:
     legend_font = font_value("legend_font_size")
     line_width = plot.get("line_width")
     marker_size = plot.get("marker_size")
-    xlim = plot.get("xlim")
-    ylim = plot.get("ylim")
     max_x_ticks = plot.get("max_x_ticks")
     max_y_ticks = plot.get("max_y_ticks")
 
@@ -708,10 +706,24 @@ def _apply_figure_style(fig, config: dict) -> None:
             raise ValueError(f"plot.{name} must contain two finite values with minimum < maximum.")
         return lower, upper
 
-    x_limits = axis_limits(xlim, "xlim")
-    y_limits = axis_limits(ylim, "ylim")
+    global_x_limits = axis_limits(plot.get("xlim"), "xlim")
+    global_y_limits = axis_limits(plot.get("ylim"), "ylim")
+    scoped_limits = {
+        "coverage": (
+            axis_limits(plot.get("coverage_xlim"), "coverage_xlim"),
+            axis_limits(plot.get("coverage_ylim"), "coverage_ylim"),
+        ),
+        "size": (
+            axis_limits(plot.get("size_xlim"), "size_xlim"),
+            axis_limits(plot.get("size_ylim"), "size_ylim"),
+        ),
+    }
 
     for ax in fig.axes:
+        scope = getattr(ax, "_tscp_plot_scope", None)
+        scope_x, scope_y = scoped_limits.get(scope, (None, None))
+        x_limits = scope_x if scope_x is not None else global_x_limits
+        y_limits = scope_y if scope_y is not None else global_y_limits
         if title_font is not None:
             ax.title.set_fontsize(float(title_font))
         if label_font is not None:
@@ -882,6 +894,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         )
         for col, dataset in enumerate(datasets):
             ax = coverage_axes[0, col]
+            ax._tscp_plot_scope = "coverage"
             part = cov[cov.dataset == dataset]
             ax.plot(part.x, part.empirical, marker="o", label="Empirical")
             ax.plot(part.x, part.corrected_bound, linestyle="--", label="Theoretical")
@@ -901,6 +914,7 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         )
         for col, dataset in enumerate(datasets):
             ax = size_axes[0, col]
+            ax._tscp_plot_scope = "size"
             part = size_stats[size_stats.dataset == dataset].sort_values("x")
             x_values = part.x.to_numpy(dtype=float)
             size_mean = part.average_size.to_numpy(dtype=float)
@@ -930,6 +944,8 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 1, 2, figsize=_plot_figsize(config, (10.0, 4.0)), squeeze=False,
             )
             coverage_ax, size_ax = dataset_axes[0]
+            coverage_ax._tscp_plot_scope = "coverage"
+            size_ax._tscp_plot_scope = "size"
 
             coverage_part = cov[cov.dataset == dataset].sort_values("x")
             coverage_ax.plot(
