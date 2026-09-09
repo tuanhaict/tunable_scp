@@ -1,0 +1,9 @@
+defaults: [loo_validation_regression.yaml]
+task: regression
+experiment:
+  name: loo_validation_superconductivity
+  type: loo_histogram
+  trials: 200
+  bins: 30
+seeds: [1]
+datasets: [superconductivity]

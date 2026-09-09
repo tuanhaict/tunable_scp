@@ -15,4 +15,4 @@ budget:
   value_by_dataset:
     synthetic_regression: 15.0
     california_housing: 2.0
-    # superconductivity: 40.0
+    superconductivity: 40.0
