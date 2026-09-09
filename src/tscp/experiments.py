@@ -862,7 +862,16 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
     datasets = config["datasets"]
     if kind == "self_validation":
         cov = _mean(frame[frame.panel == "coverage"], ["dataset", "x"], ["empirical", "corrected_bound", "old_proxy"])
-        size = _mean(frame[frame.panel == "size"], ["dataset", "x"], ["average_size", "budget"])
+        size_stats = (
+            frame[frame.panel == "size"]
+            .groupby(["dataset", "x"], as_index=False)
+            .agg(
+                average_size=("average_size", "mean"),
+                average_size_std=("average_size", "std"),
+                budget=("budget", "mean"),
+            )
+        )
+        size_stats["average_size_std"] = size_stats["average_size_std"].fillna(0.0)
 
         # Coverage figure: one panel per dataset.  The empirical curve varies
         # with the test-batch prefix, whereas the independent-reference target
@@ -892,9 +901,19 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         )
         for col, dataset in enumerate(datasets):
             ax = size_axes[0, col]
-            part = size[size.dataset == dataset]
-            ax.plot(part.x, part.average_size, marker="o", label="Average size")
-            ax.plot(part.x, part.budget, linestyle=":", label="Budget")
+            part = size_stats[size_stats.dataset == dataset].sort_values("x")
+            x_values = part.x.to_numpy(dtype=float)
+            size_mean = part.average_size.to_numpy(dtype=float)
+            size_std = part.average_size_std.to_numpy(dtype=float)
+            mean_line, = ax.plot(x_values, size_mean, marker="o", label="Average size")
+            ax.fill_between(
+                x_values, size_mean - size_std, size_mean + size_std,
+                color=mean_line.get_color(), alpha=0.2,
+            )
+            ax.plot(
+                x_values, part.budget.to_numpy(dtype=float), linestyle=":",
+                color=mean_line.get_color(), label="Budget",
+            )
             ax.set_title(_dataset_display_name(dataset))
             ax.set_xlabel(r"Total calibration size $2n$")
             if col == 0:
@@ -906,16 +925,6 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
         # Also export one publication-ready 1x2 figure per dataset.  The raw
         # dataset key remains in metrics.csv; the display name is used only as
         # the filename.  No panel title is added.
-        size_stats = (
-            frame[frame.panel == "size"]
-            .groupby(["dataset", "x"], as_index=False)
-            .agg(
-                average_size=("average_size", "mean"),
-                average_size_std=("average_size", "std"),
-                budget=("budget", "mean"),
-            )
-        )
-        size_stats["average_size_std"] = size_stats["average_size_std"].fillna(0.0)
         for dataset in datasets:
             dataset_fig, dataset_axes = plt.subplots(
                 1, 2, figsize=_plot_figsize(config, (10.0, 4.0)), squeeze=False,
@@ -949,7 +958,8 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             )
             size_ax.plot(
                 x_values, size_part.budget.to_numpy(dtype=float),
-                linestyle=":", label="Pre-chosen set size",
+                linestyle=":", color=mean_line.get_color(),
+                label="Pre-chosen set size",
             )
             size_ax.set_xlabel(r"Total calibration size $(2 \times n)$")
             size_ax.set_ylabel("Average set size")
