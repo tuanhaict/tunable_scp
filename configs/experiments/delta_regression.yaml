@@ -11,5 +11,4 @@ budget:
     california_housing: 2.0
     superconductivity: 40.0
 data:
-  total_calibration_size: 6000
-
+  total_calibration_size: 2000
