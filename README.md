@@ -93,7 +93,7 @@ python scripts/run_suite.py --suite configs/suites/main_paper.yaml --smoke
 
 | Config | Output |
 |---|---|
-| `self_validation_*.yaml` | Corrected coverage vs. test count and size vs. total calibration size |
+| `self_validation_*.yaml` | Empirical coverage vs. the independent-reference target `1-E[alpha]-E[Delta]`, and size vs. total calibration size |
 | `delta_*.yaml` | Coverage and average size as functions of slack `delta` |
 | `compare_ecp_*.yaml` | Coverage-size comparison of TsCP variants and eCP |
 | `hard_constraint*.yaml` | Hard-constraint satisfaction tables |
@@ -164,14 +164,23 @@ Hard-constraint runs additionally write CSV and LaTeX tables. Regenerate a figur
 python scripts/make_figures.py --run-dir outputs/<experiment>/<timestamp>
 ```
 
-## Corrected coverage estimator
+## Corrected coverage estimators
+
+For self-validation, the theoretical curve does not use LOO. Each independent
+reference trial redraws the calibration sample `C=(D1,D2)` and one test point
+`(X0,Y0)`. It records `alpha_C(X0)` and
+`Delta_C(X0) = 1{Y0 not in C_C(X0)} - alpha_C(X0)`, and the plotted target is
+`1 - mean(reference alpha) - mean(reference Delta)`. The number of Monte Carlo
+draws is controlled by `experiment.reference_trials`.
+
+The dedicated LOO experiments use the estimator below.
 
 For each observation in `D1`, the implementation removes that observation, recomputes its adaptive level, and evaluates its pseudo-error against the independent `D2` quantile. Saved metrics include:
 
 - `alpha_hat`: LOO estimate of `E[alpha_delta(X)]`;
 - `delta_hat`: LOO estimate of `E[Delta_delta,n]`;
 - `old_proxy`: `1 - alpha_hat`, retained only for comparison;
-- `corrected_bound`: `1 - alpha_hat - delta_hat`, used for theoretical curves.
+- `corrected_bound`: `1 - alpha_hat - delta_hat`.
 
 The implementation is in `src/tscp/theory/coverage.py`. The old proxy must not be labeled as the revised theorem's coverage bound.
 

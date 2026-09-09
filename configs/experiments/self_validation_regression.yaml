@@ -3,6 +3,7 @@ task: regression
 experiment:
   name: self_validation_regression
   type: self_validation
+  reference_trials: 500
 datasets: [synthetic_regression, california_housing]
 budget:
   value_by_dataset:

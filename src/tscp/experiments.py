@@ -85,25 +85,114 @@ def _theory_columns(result) -> dict:
 
 
 def collect_self_validation(config: dict) -> pd.DataFrame:
+    """Validate the corrected coverage identity against an independent test batch.
+
+    The theoretical curve is estimated by an independent Monte Carlo stream.
+    Every reference trial redraws the full calibration sample C=(D1,D2) and one
+    test observation (X0,Y0), then records alpha_C(X0) and
+    Delta_C(X0)=1{Y0 not in C_C(X0)}-alpha_C(X0).  In particular, this
+    experiment does not use a leave-one-out coverage estimate.
+    """
     rows = []
+    data_cfg = config["data"]
+    method_cfg = config.get("method", {})
+    reference_trials = int(config.get("experiment", {}).get("reference_trials", 500))
+    if reference_trials < 1:
+        raise ValueError("Self-validation requires at least one reference trial.")
     test_sizes = config["data"]["number_test_samples"]
     cal_sizes = config["data"]["total_calibration_sizes"]
     fixed_cal = int(config["data"]["total_calibration_size"])
     fixed_test = int(config["data"]["fixed_number_test_samples"])
+    grid = alpha_grid(config)
+    delta = float(method_cfg.get("delta", 0.1))
+    score_type = method_cfg.get("score", "one_minus_probability")
+    tie_break_epsilon = float(method_cfg.get("tie_break_epsilon", 0.0))
+
     for dataset in config["datasets"]:
+        budget = budget_for_dataset(config, dataset)
         for seed in config["seeds"]:
-            _, maximum = evaluate(config, dataset, seed, calibration_size=fixed_cal, number_test=max(test_sizes))
+            task, split, fitted = prepare(config, dataset, int(seed))
+
+            def run_tscp(calibration_size: int, number_test: int, run_seed: int,
+                         trial_split=split, trial_fitted=fitted):
+                if task == "regression":
+                    return evaluate_regression(
+                        trial_split, trial_fitted, "tscp", calibration_size, budget,
+                        delta, grid, run_seed, number_test, estimate_coverage=False,
+                    )
+                return evaluate_classification(
+                    trial_split, trial_fitted, "tscp", calibration_size, budget,
+                    delta, grid, run_seed, number_test, score_type,
+                    tie_break_epsilon, estimate_coverage=False,
+                )
+
+            # Ordinary empirical coverage: one fixed calibration draw and
+            # increasingly long prefixes of one independent test batch.
+            maximum = run_tscp(fixed_cal, max(test_sizes), int(seed) + 1000)
+
+            # Independent Monte Carlo estimate of E[alpha_C(X0)] and
+            # E[Delta_C(X0)].  Drawing the calibration indices first with the
+            # same seed mirrors the draw made internally by evaluate_*; the
+            # following RNG draw therefore selects the corresponding X0.
+            reference_alphas = []
+            reference_deltas = []
+            reference_covered = []
+            for reference_trial in range(reference_trials):
+                reference_seed = (
+                    1_000_000_000 + int(seed) * 10_000_000
+                    + fixed_cal * 1_000 + reference_trial
+                )
+                reference_rng = np.random.default_rng(reference_seed)
+                reference_rng.choice(len(split.y_cal), fixed_cal, replace=False)
+                test_index = int(reference_rng.integers(0, len(split.y_test)))
+                trial_split = replace(
+                    split,
+                    x_test=split.x_test[[test_index]],
+                    y_test=split.y_test[[test_index]],
+                )
+                if task == "regression":
+                    trial_fitted = replace(
+                        fitted,
+                        pred_test=fitted.pred_test[[test_index]],
+                        scale_test=fitted.scale_test[[test_index]],
+                    )
+                else:
+                    trial_fitted = replace(
+                        fitted,
+                        probs_test=fitted.probs_test[[test_index]],
+                    )
+                reference = run_tscp(
+                    fixed_cal, 1, reference_seed, trial_split, trial_fitted,
+                )
+                alpha_value = float(reference.alphas[0])
+                covered_value = float(reference.covered[0])
+                reference_alphas.append(alpha_value)
+                reference_deltas.append((1.0 - covered_value) - alpha_value)
+                reference_covered.append(covered_value)
+
+            expected_alpha = float(np.mean(reference_alphas))
+            expected_delta = float(np.mean(reference_deltas))
+            reference_coverage = float(np.mean(reference_covered))
+            corrected_theory = 1.0 - expected_alpha - expected_delta
+            theory_columns = {
+                "expected_alpha": expected_alpha,
+                "expected_delta": expected_delta,
+                "old_proxy": 1.0 - expected_alpha,
+                "corrected_bound": corrected_theory,
+                "reference_coverage": reference_coverage,
+                "reference_trials": reference_trials,
+            }
+
             for count in test_sizes:
                 count = min(int(count), len(maximum.covered))
                 rows.append({"panel": "coverage", "dataset": dataset, "seed": seed, "x": count,
                              "empirical": float(maximum.covered[:count].mean()), "average_size": float(maximum.sizes[:count].mean()),
-                             **_theory_columns(maximum)})
+                             **theory_columns})
             for size in cal_sizes:
-                _, result = evaluate(config, dataset, seed, calibration_size=int(size), number_test=fixed_test)
+                result = run_tscp(int(size), fixed_test, int(seed) + 1000)
                 rows.append({"panel": "size", "dataset": dataset, "seed": seed, "x": int(size),
                              "empirical": result.coverage, "average_size": result.average_size,
-                             "budget": float(result.budgets.mean()), "hard_accuracy": result.hard_constraint_accuracy,
-                             **_theory_columns(result)})
+                             "budget": float(result.budgets.mean()), "hard_accuracy": result.hard_constraint_accuracy})
     return pd.DataFrame(rows)
 
 

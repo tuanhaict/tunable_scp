@@ -40,6 +40,8 @@ def main() -> Path:
         if config.get("experiment", {}).get("type") == "loo_histogram":
             config["experiment"]["trials"] = 3
             config["experiment"]["bins"] = 5
+        if config.get("experiment", {}).get("type") == "self_validation":
+            config["experiment"]["reference_trials"] = 5
         if config.get("experiment", {}).get("type") == "loo_compare_ecp":
             config["experiment"]["trials"] = 3
             config["experiment"]["reference_trials"] = 5

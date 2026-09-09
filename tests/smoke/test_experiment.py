@@ -18,6 +18,7 @@ def test_self_validation_collector_on_small_synthetic_data():
     config["datasets"] = ["synthetic_regression"]
     config["seeds"] = [0]
     config["model"] = {"mean": "ridge", "scale": "ridge"}
+    config["experiment"]["reference_trials"] = 4
     config["data"].update({
         "max_samples": 800,
         "total_calibration_size": 80,
@@ -28,7 +29,18 @@ def test_self_validation_collector_on_small_synthetic_data():
     config["budget"] = {"type": "constant", "value": 10.0}
     frame = collect_self_validation(config)
     assert {"coverage", "size"} == set(frame["panel"])
-    assert frame["corrected_bound"].notna().all()
+    coverage = frame[frame["panel"] == "coverage"]
+    assert coverage["corrected_bound"].notna().all()
+    assert coverage["expected_alpha"].notna().all()
+    assert coverage["expected_delta"].notna().all()
+    assert set(coverage["reference_trials"]) == {4}
+    np.testing.assert_allclose(
+        coverage["corrected_bound"],
+        1.0 - coverage["expected_alpha"] - coverage["expected_delta"],
+    )
+    np.testing.assert_allclose(
+        coverage["corrected_bound"], coverage["reference_coverage"],
+    )
 
 
 def test_loo_comparison_uses_one_random_test_point_per_trial():

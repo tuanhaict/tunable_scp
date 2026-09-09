@@ -3,6 +3,7 @@ task: classification
 experiment:
   name: self_validation_classification
   type: self_validation
+  reference_trials: 500
 datasets: [synthetic_classification, mnist, covertype]
 method:
   delta: 1.1
@@ -14,4 +15,3 @@ budget:
 data:
   total_calibration_size: 1000
   total_calibration_sizes: [600, 800, 1000, 1200, 1600, 2000]
-
