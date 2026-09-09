@@ -66,20 +66,13 @@ def test_loo_comparison_uses_one_random_test_point_per_trial():
 
     assert set(frame["number_test"]) == {1}
     assert frame.groupby(["outer_seed", "trial"])["test_index"].nunique().eq(1).all()
-    np.testing.assert_allclose(
-        frame["absolute_error"], np.abs(frame["loo_estimate"] - frame["reference_target"]),
-    )
-    np.testing.assert_allclose(
-        frame["reference_target"], frame["reference_alpha"] + frame["reference_delta"],
-    )
     per_seed, points = summarize_loo_compare(frame)
     assert len(per_seed) == 2
     assert len(points) == 2
-    assert {"variance_mean", "absolute_error_mean", "reference_target_mean"} <= set(points.columns)
+    assert {"variance_mean", "coverage_gap_mean", "empirical_coverage_mean"} <= set(points.columns)
     report = loo_compare_report_table(points)
     assert list(report.columns) == [
         "dataset", "total_calibration_size", "ecp_variance", "tscp_variance",
-        "ecp_absolute_error", "tscp_absolute_error",
     ]
     coverage_report = loo_coverage_report_table(points)
     assert list(coverage_report.columns) == [

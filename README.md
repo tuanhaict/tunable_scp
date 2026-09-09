@@ -144,18 +144,15 @@ For each outer seed and calibration size, the comparison performs multiple
 calibration trials. The truncated-eCP estimator is `alpha_hat_loo`; the corrected
 TsCP estimator is `alpha_hat_loo + delta_hat_loo`. Every trial resamples the
 calibration subset. A separate, independent `reference_trials` stream resamples
-both calibration and exactly one random test point per draw to estimate the
-fixed target expectation. Errors are then computed as
-`abs(loo_estimate - reference_target)`. Lines and bands report the mean and one
-standard deviation over outer seeds. The CSV also records the reference alpha,
-delta, target, and Monte Carlo standard error.
+both calibration and exactly one random test point per draw to estimate
+empirical coverage. The figure shows only the absolute gap between LOO-estimated
+coverage and empirical coverage; lines and bands report the mean and one
+standard deviation over outer seeds.
 
-LOO comparison runs additionally write a compact `loo_compare_points.csv` with
-one row per dataset/calibration size and only the four plotted mean values:
-eCP/TsCP variance and eCP/TsCP absolute error. The more detailed per-outer-seed
-statistics remain available in `loo_compare_points_by_seed.csv`.
-The third plot compares each LOO coverage estimate with independently estimated
-empirical coverage. Its report values are saved in `loo_coverage_points.csv`.
+LOO comparison runs write variance-only points to `loo_compare_points.csv` and
+the estimated/empirical coverage values and gaps to `loo_coverage_points.csv`.
+More detailed per-outer-seed statistics remain available in
+`loo_compare_points_by_seed.csv`.
 
 Run the regression or classification LOO histogram with:
 
