@@ -6,7 +6,7 @@ experiment:
   reference_trials: 500
 datasets: [synthetic_classification, mnist, covertype]
 method:
-  delta: 1.1
+  delta: 1.0
 budget:
   value_by_dataset:
     synthetic_classification: 16
