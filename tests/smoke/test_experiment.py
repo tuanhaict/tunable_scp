@@ -7,6 +7,7 @@ from tscp.experiments import (
     collect_loo_compare_ecp,
     collect_self_validation,
     loo_compare_report_table,
+    loo_coverage_report_table,
     summarize_loo_compare,
 )
 
@@ -59,4 +60,10 @@ def test_loo_comparison_uses_one_random_test_point_per_trial():
     assert list(report.columns) == [
         "dataset", "total_calibration_size", "ecp_variance", "tscp_variance",
         "ecp_absolute_error", "tscp_absolute_error",
+    ]
+    coverage_report = loo_coverage_report_table(points)
+    assert list(coverage_report.columns) == [
+        "dataset", "total_calibration_size",
+        "ecp_estimated_coverage", "ecp_empirical_coverage", "ecp_coverage_gap",
+        "tscp_estimated_coverage", "tscp_empirical_coverage", "tscp_coverage_gap",
     ]

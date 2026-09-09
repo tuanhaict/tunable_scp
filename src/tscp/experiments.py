@@ -312,6 +312,7 @@ def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
                 reference = {"truncated_eCP": [], "TsCP": []}
                 reference_alpha = {"truncated_eCP": [], "TsCP": []}
                 reference_delta = {"truncated_eCP": [], "TsCP": []}
+                reference_covered = {"truncated_eCP": [], "TsCP": []}
                 for reference_trial in range(reference_trials):
                     reference_seed = (
                         1_000_000_000 + int(outer_seed) * 10_000_000
@@ -347,18 +348,23 @@ def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
                     reference_alpha["truncated_eCP"].append(ecp_alpha)
                     reference_delta["truncated_eCP"].append(0.0)
                     reference["truncated_eCP"].append(ecp_alpha)
+                    reference_covered["truncated_eCP"].append(float(ecp_reference.covered[0]))
                     reference_alpha["TsCP"].append(tscp_alpha)
                     reference_delta["TsCP"].append(tscp_delta)
                     reference["TsCP"].append(tscp_alpha + tscp_delta)
+                    reference_covered["TsCP"].append(float(tscp_reference.covered[0]))
 
                 reference_stats = {}
                 for method_name in ("truncated_eCP", "TsCP"):
                     samples = np.asarray(reference[method_name], dtype=float)
+                    covered_samples = np.asarray(reference_covered[method_name], dtype=float)
                     reference_stats[method_name] = {
                         "alpha": float(np.mean(reference_alpha[method_name])),
                         "delta": float(np.mean(reference_delta[method_name])),
                         "target": float(samples.mean()),
                         "standard_error": float(samples.std(ddof=1) / np.sqrt(reference_trials)),
+                        "empirical_coverage": float(covered_samples.mean()),
+                        "coverage_standard_error": float(covered_samples.std(ddof=1) / np.sqrt(reference_trials)),
                     }
 
                 # Independent evaluation stream: only these LOO estimates enter
@@ -431,6 +437,9 @@ def collect_loo_compare_ecp(config: dict) -> pd.DataFrame:
                             "reference_delta": stats["delta"],
                             "reference_target": stats["target"],
                             "reference_standard_error": stats["standard_error"],
+                            "coverage_estimate": 1.0 - estimate_value,
+                            "reference_empirical_coverage": stats["empirical_coverage"],
+                            "reference_coverage_standard_error": stats["coverage_standard_error"],
                             "absolute_error": abs(estimate_value - stats["target"]),
                         })
     return pd.DataFrame(rows)
@@ -531,6 +540,12 @@ def summarize_loo_compare(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
         reference_delta=("reference_delta", "first"),
         reference_target=("reference_target", "first"),
         reference_standard_error=("reference_standard_error", "first"),
+        mean_coverage_estimate=("coverage_estimate", "mean"),
+        empirical_coverage=("reference_empirical_coverage", "first"),
+        empirical_coverage_standard_error=("reference_coverage_standard_error", "first"),
+    )
+    per_seed["coverage_gap"] = np.abs(
+        per_seed["mean_coverage_estimate"] - per_seed["empirical_coverage"]
     )
     summary = per_seed.groupby(
         ["dataset", "method", "calibration_size"], as_index=False,
@@ -547,8 +562,13 @@ def summarize_loo_compare(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
         reference_target_mean=("reference_target", "mean"),
         reference_target_std=("reference_target", "std"),
         reference_mc_standard_error_mean=("reference_standard_error", "mean"),
+        coverage_estimate_mean=("mean_coverage_estimate", "mean"),
+        empirical_coverage_mean=("empirical_coverage", "mean"),
+        coverage_gap_mean=("coverage_gap", "mean"),
+        coverage_gap_std=("coverage_gap", "std"),
+        empirical_coverage_mc_standard_error_mean=("empirical_coverage_standard_error", "mean"),
     )
-    for column in ("variance_std", "absolute_error_std", "reference_target_std"):
+    for column in ("variance_std", "absolute_error_std", "reference_target_std", "coverage_gap_std"):
         summary[column] = summary[column].fillna(0.0)
     return per_seed, summary
 
@@ -572,6 +592,30 @@ def loo_compare_report_table(summary: pd.DataFrame) -> pd.DataFrame:
         "dataset", "total_calibration_size",
         "ecp_variance", "tscp_variance",
         "ecp_absolute_error", "tscp_absolute_error",
+    ]
+    return table[columns].sort_values(["dataset", "total_calibration_size"]).reset_index(drop=True)
+
+
+def loo_coverage_report_table(summary: pd.DataFrame) -> pd.DataFrame:
+    """Compact table for estimated-vs-empirical coverage and their gaps."""
+    table = summary.pivot(
+        index=["dataset", "calibration_size"], columns="method",
+        values=["coverage_estimate_mean", "empirical_coverage_mean", "coverage_gap_mean"],
+    )
+    table.columns = [f"{metric}__{method}" for metric, method in table.columns]
+    table = table.reset_index().rename(columns={
+        "calibration_size": "total_calibration_size",
+        "coverage_estimate_mean__truncated_eCP": "ecp_estimated_coverage",
+        "empirical_coverage_mean__truncated_eCP": "ecp_empirical_coverage",
+        "coverage_gap_mean__truncated_eCP": "ecp_coverage_gap",
+        "coverage_estimate_mean__TsCP": "tscp_estimated_coverage",
+        "empirical_coverage_mean__TsCP": "tscp_empirical_coverage",
+        "coverage_gap_mean__TsCP": "tscp_coverage_gap",
+    })
+    columns = [
+        "dataset", "total_calibration_size",
+        "ecp_estimated_coverage", "ecp_empirical_coverage", "ecp_coverage_gap",
+        "tscp_estimated_coverage", "tscp_empirical_coverage", "tscp_coverage_gap",
     ]
     return table[columns].sort_values(["dataset", "total_calibration_size"]).reset_index(drop=True)
 
@@ -688,10 +732,11 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 if show_legend:
                     ax.legend(fontsize=7)
     elif kind == "loo_compare_ecp":
-        fig, axes = plt.subplots(2, len(datasets), figsize=(5.2 * len(datasets), 7.0), squeeze=False)
+        fig, axes = plt.subplots(3, len(datasets), figsize=(5.2 * len(datasets), 10.0), squeeze=False)
         per_seed, summary = summarize_loo_compare(frame)
         per_seed.to_csv(output / "loo_compare_points_by_seed.csv", index=False)
         loo_compare_report_table(summary).to_csv(output / "loo_compare_points.csv", index=False)
+        loo_coverage_report_table(summary).to_csv(output / "loo_coverage_points.csv", index=False)
         styles = {
             "truncated_eCP": ("tab:blue", "o", r"truncated eCP: $\hat\alpha^{LOO}$"),
             "TsCP": ("tab:orange", "s", r"TsCP: $\hat\alpha^{LOO}+\hat\delta^{LOO}$"),
@@ -705,6 +750,8 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                 variance_std = part.variance_std.to_numpy(dtype=float)
                 error = part.absolute_error_mean.to_numpy(dtype=float)
                 error_std = part.absolute_error_std.to_numpy(dtype=float)
+                coverage_gap = part.coverage_gap_mean.to_numpy(dtype=float)
+                coverage_gap_std = part.coverage_gap_std.to_numpy(dtype=float)
                 axes[0, col].plot(x, variance, color=color, marker=marker, label=label)
                 axes[0, col].fill_between(
                     x, np.maximum(variance - variance_std, np.finfo(float).tiny),
@@ -715,14 +762,21 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
                     x, np.maximum(error - error_std, 0.0), error + error_std,
                     color=color, alpha=0.18,
                 )
+                axes[2, col].plot(x, coverage_gap, color=color, marker=marker, label=label)
+                axes[2, col].fill_between(
+                    x, np.maximum(coverage_gap - coverage_gap_std, 0.0),
+                    coverage_gap + coverage_gap_std, color=color, alpha=0.18,
+                )
             axes[0, col].set_title(dataset)
             axes[0, col].set_xscale("log")
             axes[0, col].set_yscale("log")
             axes[0, col].set_xlabel(r"Total calibration size $N_{\mathrm{cal}}=2n$")
             axes[1, col].set_xlabel(r"Total calibration size $N_{\mathrm{cal}}=2n$")
+            axes[2, col].set_xlabel(r"Total calibration size $N_{\mathrm{cal}}=2n$")
             if col == 0:
                 axes[0, col].set_ylabel(r"$\mathrm{Var}(\hat\theta^{LOO})$")
                 axes[1, col].set_ylabel(r"$|\hat\theta^{LOO}-\widehat{\mathbb{E}}[\theta]|$")
+                axes[2, col].set_ylabel(r"$|\widehat{\mathrm{Coverage}}-\mathrm{Coverage}_{emp}|$")
             if col == 0:
                 axes[0, col].legend()
     else:

@@ -124,6 +124,8 @@ LOO comparison runs additionally write a compact `loo_compare_points.csv` with
 one row per dataset/calibration size and only the four plotted mean values:
 eCP/TsCP variance and eCP/TsCP absolute error. The more detailed per-outer-seed
 statistics remain available in `loo_compare_points_by_seed.csv`.
+The third plot compares each LOO coverage estimate with independently estimated
+empirical coverage. Its report values are saved in `loo_coverage_points.csv`.
 
 Run the regression or classification LOO histogram with:
 
