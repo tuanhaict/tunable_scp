@@ -935,17 +935,64 @@ def make_figures(frame: pd.DataFrame, config: dict, output: Path) -> None:
             )
         return
     elif kind == "delta_ablation":
-        fig, axes = plt.subplots(1, 2, figsize=_plot_figsize(config, (12, 4.5)))
-        avg = _mean(frame, ["dataset", "delta"], ["coverage", "corrected_bound", "average_size", "budget"])
-        for dataset in datasets:
-            part = avg[avg.dataset == dataset]
-            display_name = _dataset_display_name(dataset)
-            axes[0].plot(part.delta, part.coverage, marker="o", label=f"{display_name} empirical")
-            axes[0].plot(part.delta, part.corrected_bound, linestyle="--", label=f"{display_name} corrected theory")
-            axes[1].plot(part.delta, part.average_size, marker="o", label=display_name)
-            axes[1].plot(part.delta, part.budget, linestyle=":", color=axes[1].lines[-1].get_color())
-        axes[0].set(xlabel=r"Slack $\delta$", ylabel="Coverage")
-        axes[1].set(xlabel=r"Slack $\delta$", ylabel="Average prediction-set size")
+        fig, axes = plt.subplots(
+            2, len(datasets),
+            figsize=_plot_figsize(config, (5.2 * len(datasets), 8.0)),
+            squeeze=False,
+        )
+        stats = (
+            frame.groupby(["dataset", "delta"], as_index=False)
+            .agg(
+                coverage=("coverage", "mean"),
+                corrected_bound=("corrected_bound", "mean"),
+                average_size=("average_size", "mean"),
+                average_size_std=("average_size", "std"),
+                budget=("budget", "mean"),
+            )
+        )
+        stats["average_size_std"] = stats["average_size_std"].fillna(0.0)
+
+        for col, dataset in enumerate(datasets):
+            coverage_ax = axes[0, col]
+            size_ax = axes[1, col]
+            coverage_ax._tscp_plot_scope = "coverage"
+            size_ax._tscp_plot_scope = "size"
+            part = stats[stats.dataset == dataset].sort_values("delta")
+            x_values = part.delta.to_numpy(dtype=float)
+
+            coverage_ax.plot(
+                x_values, part.coverage.to_numpy(dtype=float), marker="o",
+                label="Empirical" if col == 0 else "_nolegend_",
+            )
+            coverage_ax.plot(
+                x_values, part.corrected_bound.to_numpy(dtype=float), linestyle="--",
+                label="Theoretical" if col == 0 else "_nolegend_",
+            )
+            coverage_ax.set_title(_dataset_display_name(dataset))
+            coverage_ax.set_xlabel(r"Slack $\delta$")
+            if col == 0:
+                coverage_ax.set_ylabel("Coverage")
+                coverage_ax.legend(loc="best")
+
+            size_mean = part.average_size.to_numpy(dtype=float)
+            size_std = part.average_size_std.to_numpy(dtype=float)
+            mean_line, = size_ax.plot(
+                x_values, size_mean, marker="o",
+                label="Mean over seeds" if col == 0 else "_nolegend_",
+            )
+            size_ax.fill_between(
+                x_values, size_mean - size_std, size_mean + size_std,
+                color=mean_line.get_color(), alpha=0.2,
+            )
+            size_ax.plot(
+                x_values, part.budget.to_numpy(dtype=float), linestyle=":",
+                color=mean_line.get_color(),
+                label="Pre-chosen set size" if col == 0 else "_nolegend_",
+            )
+            size_ax.set_xlabel(r"Slack $\delta$")
+            if col == 0:
+                size_ax.set_ylabel("Average set size")
+                size_ax.legend(loc="best")
     elif kind in {"compare_ecp", "budget_ablation"}:
         fig, axes = plt.subplots(
             1, len(datasets), figsize=_plot_figsize(config, (6 * len(datasets), 4.5)), squeeze=False,
