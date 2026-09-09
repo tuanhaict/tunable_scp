@@ -64,6 +64,8 @@ def test_loo_comparison_uses_one_random_test_point_per_trial():
     coverage_report = loo_coverage_report_table(points)
     assert list(coverage_report.columns) == [
         "dataset", "total_calibration_size",
-        "ecp_estimated_coverage", "ecp_empirical_coverage", "ecp_coverage_gap",
-        "tscp_estimated_coverage", "tscp_empirical_coverage", "tscp_coverage_gap",
+        "ecp_estimated_coverage", "ecp_empirical_coverage",
+        "ecp_coverage_gap", "ecp_coverage_gap_std",
+        "tscp_estimated_coverage", "tscp_empirical_coverage",
+        "tscp_coverage_gap", "tscp_coverage_gap_std",
     ]

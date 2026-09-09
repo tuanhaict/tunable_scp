@@ -600,7 +600,10 @@ def loo_coverage_report_table(summary: pd.DataFrame) -> pd.DataFrame:
     """Compact table for estimated-vs-empirical coverage and their gaps."""
     table = summary.pivot(
         index=["dataset", "calibration_size"], columns="method",
-        values=["coverage_estimate_mean", "empirical_coverage_mean", "coverage_gap_mean"],
+        values=[
+            "coverage_estimate_mean", "empirical_coverage_mean",
+            "coverage_gap_mean", "coverage_gap_std",
+        ],
     )
     table.columns = [f"{metric}__{method}" for metric, method in table.columns]
     table = table.reset_index().rename(columns={
@@ -608,14 +611,18 @@ def loo_coverage_report_table(summary: pd.DataFrame) -> pd.DataFrame:
         "coverage_estimate_mean__truncated_eCP": "ecp_estimated_coverage",
         "empirical_coverage_mean__truncated_eCP": "ecp_empirical_coverage",
         "coverage_gap_mean__truncated_eCP": "ecp_coverage_gap",
+        "coverage_gap_std__truncated_eCP": "ecp_coverage_gap_std",
         "coverage_estimate_mean__TsCP": "tscp_estimated_coverage",
         "empirical_coverage_mean__TsCP": "tscp_empirical_coverage",
         "coverage_gap_mean__TsCP": "tscp_coverage_gap",
+        "coverage_gap_std__TsCP": "tscp_coverage_gap_std",
     })
     columns = [
         "dataset", "total_calibration_size",
-        "ecp_estimated_coverage", "ecp_empirical_coverage", "ecp_coverage_gap",
-        "tscp_estimated_coverage", "tscp_empirical_coverage", "tscp_coverage_gap",
+        "ecp_estimated_coverage", "ecp_empirical_coverage",
+        "ecp_coverage_gap", "ecp_coverage_gap_std",
+        "tscp_estimated_coverage", "tscp_empirical_coverage",
+        "tscp_coverage_gap", "tscp_coverage_gap_std",
     ]
     return table[columns].sort_values(["dataset", "total_calibration_size"]).reset_index(drop=True)
 
